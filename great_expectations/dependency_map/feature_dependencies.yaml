@@ -1,0 +1,76 @@
+# Feature dependency map for alert classification.
+#
+# Committed before any injection experiment is run, so that no edge can be
+# added after the fact to explain away an inconvenient alert.
+#
+#   deterministic  an arithmetic identity that must hold
+#   empirical      a documented but stochastic relationship
+
+version: 1
+committed: "2026-09-01"
+
+edges:
+  # total_amount is the sum of its components, so a change injected into any
+  # addend must propagate into the total.
+  - source: fare_amount
+    target: total_amount
+    type: deterministic
+    description: fare_amount is an addend of total_amount
+
+  - source: extra
+    target: total_amount
+    type: deterministic
+    description: extra is an addend of total_amount
+
+  - source: mta_tax
+    target: total_amount
+    type: deterministic
+    description: mta_tax is an addend of total_amount
+
+  - source: tip_amount
+    target: total_amount
+    type: deterministic
+    description: tip_amount is an addend of total_amount
+
+  - source: tolls_amount
+    target: total_amount
+    type: deterministic
+    description: tolls_amount is an addend of total_amount
+
+  - source: improvement_surcharge
+    target: total_amount
+    type: deterministic
+    description: improvement_surcharge is an addend of total_amount
+
+  - source: congestion_surcharge
+    target: total_amount
+    type: deterministic
+    description: congestion_surcharge is an addend of total_amount
+
+  - source: Airport_fee
+    target: total_amount
+    type: deterministic
+    description: Airport_fee is an addend of total_amount
+
+  # Empirical relationships documented in the TLC data dictionary.
+  - source: payment_type
+    target: tip_amount
+    type: empirical
+    description: >
+      Tips are recorded for card transactions but not reliably for cash,
+      so a shift in the payment_type mix moves the tip_amount distribution
+      without tip_amount itself being changed.
+
+  - source: trip_distance
+    target: fare_amount
+    type: empirical
+    description: >
+      Metered fare scales with distance travelled, so a change in the
+      trip_distance distribution tends to move fare_amount.
+
+  - source: trip_distance
+    target: total_amount
+    type: empirical
+    description: >
+      Follows from the distance-to-fare relationship combined with the
+      arithmetic identity between fare_amount and total_amount.
