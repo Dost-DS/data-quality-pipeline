@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# Data (raw parquet excluded; too large for git)
+data/raw/
+
+# Airflow
+airflow/logs/
+
+# MLflow
+mlruns/
+mlartifacts/
+
+# Great Expectations uncommitted state
+great_expectations/gx/uncommitted/
+
+# Docker
+docker/volumes/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Env
+.env
