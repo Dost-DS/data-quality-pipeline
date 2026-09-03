@@ -1,0 +1,4 @@
+=== S1_20260903T182325_5758c2 : numerical mean shift ===
+  corpus: 12 file(s), 41,169,720 rows
+  activation in file 7/12 at offset 252,767
+    2,000,000/41,169,720 (4.9%) 6,619 rec/s
