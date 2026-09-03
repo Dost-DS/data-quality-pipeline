@@ -32,16 +32,32 @@ def _baseline():
         return json.load(f)
 
 
-def mean_shift(df, idx, column="fare_amount", n_std=0.75):
-    """Add a fixed offset of n_std baseline standard deviations."""
+def mean_shift(df, idx, column="fare_amount", n_std=0.75, propagate=True):
+    """Add a fixed offset of n_std baseline standard deviations.
+
+    total_amount is the arithmetic sum of the metered fare and its
+    surcharges, so shifting an addend without shifting the sum would
+    produce records that violate an identity holding in every real
+    observation. The shift is therefore carried into total_amount as
+    well, which is what makes the resulting change in total_amount a
+    genuine propagation effect rather than an artefact.
+    """
     b = _baseline()["numerical"][column]
     shift = n_std * b["std"]
     out = df.copy()
     mask = out.index >= idx
+
     out.loc[mask, column] = out.loc[mask, column] + shift
+
+    propagated = []
+    if propagate and column != "total_amount" and "total_amount" in out.columns:
+        out.loc[mask, "total_amount"] = out.loc[mask, "total_amount"] + shift
+        propagated.append("total_amount")
+
     return out, {"column": column, "shift_absolute": float(shift),
                  "shift_in_baseline_sd": n_std,
                  "baseline_mean": b["mean"], "baseline_std": b["std"],
+                 "propagated_to": propagated,
                  "affected_rows": int(mask.sum())}
 
 
