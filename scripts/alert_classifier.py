@@ -45,20 +45,21 @@ def control_alert_set(control_rows):
 def classify(feature, metric, window_start, injected, activation_ts,
              prop_targets, control_alerts):
     """Return (label, evidence) for a single alert."""
-    if feature in injected:
-        if activation_ts is None or window_start is None or window_start >= activation_ts:
-            return "CONFIRMED_DETECTION", {
-                "rule": "injected target, window at or after activation",
-                "feature": feature,
-                "activation_timestamp": str(activation_ts),
-                "window_start": str(window_start)}
-        return "UNEXPLAINED", {
-            "rule": "injected target, but window precedes activation",
+    after_activation = (activation_ts is None or window_start is None
+                        or window_start >= activation_ts)
+
+    # An alert on an injected feature is a detection only once the injection
+    # is live. Before activation the data is identical to the control, so the
+    # alert falls through to the checks below rather than being credited.
+    if feature in injected and after_activation:
+        return "CONFIRMED_DETECTION", {
+            "rule": "injected target, window at or after activation",
             "feature": feature,
             "activation_timestamp": str(activation_ts),
             "window_start": str(window_start)}
 
-    if feature in prop_targets:
+    # Propagation likewise requires the upstream change to have occurred.
+    if feature in prop_targets and after_activation:
         edge = prop_targets[feature]
         if edge["type"] == "deterministic":
             return "EXPECTED_PROPAGATION", {
