@@ -1,0 +1,13 @@
+scenario,injected_feature,metric_name,post_windows,post_alerts,mean_post,mean_pre
+S1,fare_amount,ks,2060,2060,0.688594,0.063701
+S1,fare_amount,psi,2060,0,0.005422,0.001107
+S2,payment_type,chi2,2060,2060,23956.478344,1801.898313
+S2,payment_type,psi,2060,2060,1.955133,0.097829
+S3,RatecodeID,chi2,2060,2060,78194.100791,242.230615
+S3,RatecodeID,psi,2060,2059,1.040532,0.027058
+S4,trip_distance,ks,2060,2060,0.199956,0.064128
+S4,trip_distance,psi,2060,0,0.000068,0.000062
+S5,fare_amount,ks,2060,2060,0.572442,0.063701
+S5,fare_amount,psi,2060,0,0.003150,0.001107
+S5,payment_type,chi2,2060,2060,23956.478344,1801.898313
+S5,payment_type,psi,2060,2060,1.955133,0.097829
