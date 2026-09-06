@@ -87,10 +87,13 @@ def test_kafka_and_parquet_agree_on_boundaries():
     if len(rows) < SLICE_ROWS:
         pytest.skip(f"topic held only {len(rows)} records")
 
-    from_kafka = pd.DataFrame(rows)["tpep_pickup_datetime"].astype(str).tolist()
+    # Kafka carries ISO strings through JSON, Parquet carries Timestamps;
+    # compare the instants rather than their textual form.
+    from_kafka = pd.to_datetime(
+        pd.DataFrame(rows)["tpep_pickup_datetime"]).tolist()
     src = ParquetEventSource(files[:1], limit_rows=SLICE_ROWS)
-    from_parquet = pd.concat(list(src.windows(WINDOW)))[
-        "tpep_pickup_datetime"].astype(str).tolist()
+    from_parquet = pd.to_datetime(pd.concat(list(src.windows(WINDOW)))[
+        "tpep_pickup_datetime"]).tolist()
     src.close()
     assert from_kafka == from_parquet
 
