@@ -21,7 +21,7 @@ SCENARIO_LABELS = {
     "C0": "clean control",
     "S1": "numerical mean shift",
     "S2": "categorical value swap",
-    "S3": "unseen category injection",
+    "S3": "rare-category frequency shift",
     "S4": "numerical variance shift",
     "S5": "mixed numerical and categorical",
 }
@@ -101,15 +101,19 @@ def value_swap(df, idx, column="payment_type", swap=None):
                  "affected_rows": int(mask.sum())}
 
 
-def unseen_category(df, idx, column="RatecodeID", value=99.0, fraction=0.25):
-    """Replace a fraction of records with a code absent from the baseline."""
+def rare_category_amplification(df, idx, column="RatecodeID", value=99.0, fraction=0.25):
+    """Amplify a rare existing category to a target share of records.
+
+    RatecodeID 99 (unknown rate code) is present in the baseline at 0.88%.
+    This raises it to 25%, a frequency shift rather than a novel value.
+    """
     out = df.copy()
     rng = np.random.default_rng(SEED)
     eligible = out.index[out.index >= idx]
     n = int(len(eligible) * fraction)
     chosen = rng.choice(eligible, size=n, replace=False)
     out.loc[chosen, column] = value
-    return out, {"column": column, "unseen_value": value, "fraction": fraction,
+    return out, {"column": column, "amplified_value": value, "fraction": fraction,
                  "affected_rows": int(n)}
 
 
@@ -126,7 +130,7 @@ def mixed(df, idx):
 _FUNCS = {
     "S1": mean_shift,
     "S2": value_swap,
-    "S3": unseen_category,
+    "S3": rare_category_amplification,
     "S4": variance_shift,
     "S5": mixed,
 }
