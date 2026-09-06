@@ -121,6 +121,7 @@ services:
       - ./scripts:/opt/airflow/scripts
       - ./data:/opt/airflow/data
       - ./great_expectations:/opt/airflow/great_expectations
+      - ./results:/opt/airflow/results
     networks:
       - pipeline-net
     user: "${AIRFLOW_UID:-50000}:0"
