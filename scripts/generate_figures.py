@@ -2,6 +2,21 @@
 
 Reads directly from PostgreSQL so that every figure is reproducible from the
 stored experiment data rather than from intermediate files.
+
+Two figures were corrected after the alert interpretation framework was
+verified against its implementation:
+
+  fig_window_pilot   PSI is now split by feature type. The aggregated series
+                     conflated numerical PSI, which never alerts, with
+                     categorical PSI, which does, and so presented the metric
+                     as the quietest of the three when the numerical half is
+                     simply silent.
+
+  fig_decision_tree  Rebuilt from interpretation_framework.recommend() and
+                     alert_classifier.classify() rather than from the design
+                     description. The previous version omitted the empirical
+                     dependency edge entirely and routed chi-square through a
+                     magnitude test the implementation skips.
 """
 import os
 
@@ -10,6 +25,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
+from matplotlib.lines import Line2D
 import numpy as np
 import pandas as pd
 import psycopg2
@@ -33,6 +49,7 @@ plt.rcParams.update({
 })
 
 BLUE, ORANGE, GREEN, RED, GREY = "#2E5C8A", "#E08E45", "#2E7D46", "#B23A48", "#888888"
+PALE = "#A8BBD0"          # unexercised decision-tree nodes
 
 
 def q(sql):
@@ -44,31 +61,88 @@ def q(sql):
 
 # ---------------------------------------------------------------- figure 1
 def fig_window_pilot():
-    """False-alert rate against window size, per metric."""
-    df = pd.read_csv("results/pilot_window_size.csv")
-    fig, ax = plt.subplots(figsize=(7, 4.5))
-    for metric, colour, marker in [("psi", BLUE, "o"), ("ks", ORANGE, "s"),
-                                   ("chi2", GREEN, "^")]:
-        d = df[df.metric_name == metric].sort_values("window_size")
-        ax.plot(d.window_size, d.false_alert_pct, marker=marker,
-                color=colour, label=metric.upper(), linewidth=2, markersize=7)
+    """Baseline alert rate against window size, per metric and feature type.
+
+    Not a false-alert rate: where the data has genuinely moved away from the
+    January reference, an alert is a correct detection of a change nobody
+    asked about. See Chapter 3, Section 3.5.
+    """
+    df = q("""
+        SELECT (e.ground_truth->>'window_size')::int AS window_size,
+               d.metric_name, d.feature_type,
+               COUNT(*)                           AS scores,
+               COUNT(*) FILTER (WHERE d.is_drift) AS alerts
+        FROM dq_monitoring.drift_scores d
+        JOIN dq_monitoring.experiments e USING (experiment_id)
+        WHERE e.scenario = 'PILOT'
+        GROUP BY 1, 2, 3""")
+
+    split = not df.empty
+    if not split:
+        print("  ! no PILOT rows in drift_scores - falling back to the CSV, which")
+        print("    cannot separate numerical from categorical PSI. Re-run")
+        print("    scripts/pilot_window_size.py to recover the breakdown.")
+        df = pd.read_csv("results/pilot_window_size.csv").rename(
+            columns={"false_alerts": "alerts"})
+        df["feature_type"] = "all"
+
+    df["pct"] = 100.0 * df.alerts / df.scores
+
+    # KS is computed on numerical features only and chi-square on categorical
+    # only, so neither needs splitting. Only PSI is applied to both.
+    if split:
+        series = [("psi",  "numerical",   "PSI (numerical)",   BLUE,   "o", "--", "white"),
+                  ("psi",  "categorical", "PSI (categorical)", BLUE,   "o", "-",  BLUE),
+                  ("ks",   "numerical",   "KS (numerical)",    ORANGE, "s", "-",  ORANGE),
+                  ("chi2", "categorical", "Chi\u00b2 (categorical)", GREEN, "^", "-", GREEN)]
+    else:
+        series = [("psi",  "all", "PSI (both feature types)", BLUE,   "o", "-", BLUE),
+                  ("ks",   "all", "KS (numerical)",           ORANGE, "s", "-", ORANGE),
+                  ("chi2", "all", "Chi\u00b2 (categorical)", GREEN,  "^", "-", GREEN)]
+
+    fig, ax = plt.subplots(figsize=(7.6, 4.9))
+    plotted = {}
+    for metric, ftype, label, colour, marker, style, mfc in series:
+        d = df[(df.metric_name == metric) & (df.feature_type == ftype)]
+        if d.empty:
+            continue
+        d = d.sort_values("window_size")
+        ax.plot(d.window_size, d.pct, marker=marker, color=colour, label=label,
+                linewidth=2, markersize=7, linestyle=style,
+                markerfacecolor=mfc, markeredgewidth=1.6, zorder=3)
+        plotted[label] = [round(x, 2) for x in d.pct]
+
     ax.set_xscale("log")
-    ax.set_xticks(df.window_size.unique())
+    ax.set_xticks(sorted(df.window_size.unique()))
     ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
     ax.set_xlabel("Window size (records)")
-    ax.set_ylabel("False-alert rate (%)")
-    ax.set_title("False-alert rate by window size on unmodified data")
-    ax.axvline(10000, color=GREY, linestyle="--", linewidth=1)
-    ax.text(10400, ax.get_ylim()[1] * 0.93, "adopted", fontsize=9, color=GREY)
-    ax.legend(frameon=False)
+    ax.set_ylabel("Baseline alert rate (%)")
+    ax.set_title("Baseline alert rate by window size on unmodified data")
+    ax.set_ylim(bottom=-1.2)
+    ax.axvline(10000, color=GREY, linestyle="--", linewidth=1, zorder=1)
+    ax.text(10400, ax.get_ylim()[1] * 0.94, "adopted", fontsize=9, color=GREY)
+    ax.legend(frameon=False, fontsize=9, loc="center left")
+
+    note = None
+    npsi = plotted.get("PSI (numerical)")
+    if npsi is not None and max(npsi) == 0:
+        note = "Numerical PSI raised no alert at any window size."
+    elif not split:
+        note = "PSI is aggregated over both feature types; see console warning."
+    if note:
+        ax.text(0.985, 0.05, note, transform=ax.transAxes, ha="right",
+                va="bottom", fontsize=8.5, style="italic", color="#555555")
+
     fig.savefig(f"{OUT}/fig_window_pilot.png")
     plt.close(fig)
-    print("fig_window_pilot.png")
+    print("fig_window_pilot.png" + ("" if split else "   [AGGREGATED - see warning]"))
+    for k, v in plotted.items():
+        print(f"    {k:<26}" + "  ".join(f"{x:6.2f}" for x in v))
 
 
 # ---------------------------------------------------------------- figure 2
 def fig_recall():
-    """Detection outcome per injected target and metric."""
+    """Detection outcome per injected target and metric. Unchanged."""
     df = pd.read_csv("results/recall_by_metric.csv")
     df["detected"] = df.post_alerts > 0
     df["row"] = df.scenario + "  " + df.injected_feature
@@ -105,24 +179,61 @@ def fig_recall():
 
 # ---------------------------------------------------------------- figure 3
 def fig_magnitude_ratio():
-    """How far each metric moved, pre-activation against post-activation."""
+    """Post-activation magnitude against the control's pre-activation mean.
+
+    The denominator is taken from the clean control replay rather than from
+    the scenario's own pre-activation windows. Those two differ slightly,
+    because a small number of windows carry corrupted pickup timestamps that
+    place window_start outside 2024 and are therefore counted as
+    pre-activation while containing post-activation records. The control is
+    the cleaner reference, and using it is stated on the axis.
+    """
+    act = q("""SELECT MIN(activation_timestamp) AS ts
+               FROM dq_monitoring.experiments
+               WHERE activation_timestamp IS NOT NULL""").ts.iloc[0]
+
+    ctrl = q(f"""
+        SELECT d.feature_name, d.metric_name,
+               AVG(d.metric_value) AS control_pre_mean
+        FROM dq_monitoring.drift_scores d
+        JOIN dq_monitoring.experiments e USING (experiment_id)
+        WHERE e.scenario = 'C0'
+          AND d.window_start < TIMESTAMPTZ '{act}'
+          AND d.metric_value IS NOT NULL
+        GROUP BY 1, 2""")
+
     df = pd.read_csv("results/recall_by_metric.csv")
-    df = df[df.scenario != "S5"].copy()          # S5 duplicates S1 and S2
-    df["ratio"] = df.mean_post / df.mean_pre
+    df = df[df.scenario != "S5"].copy()          # S5 is additive with S1 and S2
+    df = df.merge(ctrl, left_on=["injected_feature", "metric_name"],
+                  right_on=["feature_name", "metric_name"], how="left")
+
+    disagree = (df.control_pre_mean - df.mean_pre).abs() / df.mean_pre.abs()
+    if (disagree > 0.01).any():
+        print("    note: stored mean_pre differs from the control pre-activation mean")
+        for _, r in df[disagree > 0.01].iterrows():
+            print(f"      {r.scenario} {r.injected_feature}/{r.metric_name}: "
+                  f"stored {r.mean_pre:,.4f}  control {r.control_pre_mean:,.4f}")
+
+    df["ratio"] = df.mean_post / df.control_pre_mean
     df["label"] = df.scenario + " " + df.injected_feature + "\n" + df.metric_name.str.upper()
     df = df.sort_values("ratio")
 
     colours = [GREEN if d else RED for d in (df.post_alerts > 0)]
-    fig, ax = plt.subplots(figsize=(7.5, 5))
+    fig, ax = plt.subplots(figsize=(7.8, 5.2))
     ax.barh(df.label, df.ratio, color=colours, edgecolor="white")
     ax.set_xscale("log")
     ax.axvline(1, color=GREY, linewidth=1)
-    ax.set_xlabel("Post-activation mean \u00f7 pre-activation mean (log scale)")
+    ax.set_xlabel("Post-activation mean \u00f7 control pre-activation mean (log scale)")
     ax.set_title("Magnitude change at the injected target")
     for y, (r, det) in enumerate(zip(df.ratio, df.post_alerts > 0)):
         ax.text(r * 1.15, y, f"{r:,.1f}\u00d7" + ("" if det else "  (no alert)"),
                 va="center", fontsize=8.5)
-    ax.set_xlim(0.7, df.ratio.max() * 8)
+    ax.set_xlim(0.7, df.ratio.max() * 12)
+    ax.text(0.995, 0.03,
+            "Ratios are not comparable across metrics: KS D is bounded by 1,\n"
+            "the chi-square statistic is unbounded. See Chapter 5.",
+            transform=ax.transAxes, ha="right", va="bottom",
+            fontsize=8, style="italic", color="#555555")
     fig.savefig(f"{OUT}/fig_magnitude_ratio.png")
     plt.close(fig)
     print("fig_magnitude_ratio.png")
@@ -145,7 +256,7 @@ def fig_classification():
             pivot[c] = 0
     pivot = pivot[order].sort_index()
 
-    fig, ax = plt.subplots(figsize=(8, 4.5))
+    fig, ax = plt.subplots(figsize=(8, 4.8))
     bottom = np.zeros(len(pivot))
     for c in order:
         ax.bar(pivot.index, pivot[c], bottom=bottom, label=c.replace("_", " ").title(),
@@ -154,9 +265,11 @@ def fig_classification():
     ax.set_ylabel("Alerts")
     ax.set_title("Alert classification by scenario")
     ax.legend(frameon=False, fontsize=9, ncol=2, loc="upper left")
-    ax.text(0.99, 0.02, "No alert in any scenario was left unexplained.",
+    ax.text(0.995, 0.02,
+            "C0 is baseline variation by construction: the control defines the reference.\n"
+            "No alert was left unattributed; Chapter 5 reports how sensitive that is to the rule.",
             transform=ax.transAxes, ha="right", va="bottom",
-            fontsize=8.5, style="italic", color="#555555")
+            fontsize=8, style="italic", color="#555555")
     fig.savefig(f"{OUT}/fig_classification.png")
     plt.close(fig)
     print("fig_classification.png")
@@ -164,69 +277,130 @@ def fig_classification():
 
 # ---------------------------------------------------------------- figure 5
 def fig_decision_tree():
-    """Deliverable D1."""
-    fig, ax = plt.subplots(figsize=(11, 8.5))
-    ax.set_xlim(0, 12); ax.set_ylim(0, 11); ax.axis("off")
+    """Deliverable D1, drawn from the implementation.
 
-    def box(x, y, w, h, text, colour, fs=9.5):
-        ax.add_patch(FancyBboxPatch((x - w/2, y - h/2), w, h,
-                                    boxstyle="round,pad=0.02,rounding_size=0.08",
-                                    facecolor=colour, edgecolor="white",
-                                    linewidth=1.5, zorder=2))
-        ax.text(x, y, text, ha="center", va="center", color="white",
+    classify() then recommend():
+      schema change                        -> INVESTIGATE
+      injected target, after activation
+          metric is chi-square             -> ACT   (magnitude not assessable)
+          magnitude >= 2x threshold        -> ACT
+          otherwise                        -> INVESTIGATE
+      declared edge from an injected feature, after activation
+          deterministic edge               -> ACCEPT
+          empirical, absent from control   -> ACCEPT
+          empirical, present in control    -> SUPPRESS
+      same feature and metric in control   -> SUPPRESS
+      otherwise (unexplained)
+          magnitude >= 2x threshold        -> INVESTIGATE
+          otherwise                        -> MONITOR
+    """
+    try:
+        ex = q("""SELECT
+              (SELECT COUNT(*) FROM dq_monitoring.schema_snapshots
+               WHERE has_schema_change)     AS schema_changes,
+              (SELECT COUNT(*) FROM dq_monitoring.alert_classifications
+               WHERE label = 'UNEXPLAINED') AS unexplained""")
+        saw_schema = int(ex.schema_changes.iloc[0]) > 0
+        saw_unexpl = int(ex.unexplained.iloc[0]) > 0
+    except Exception as exc:
+        print(f"    ! could not query exercised branches ({type(exc).__name__})")
+        saw_schema = saw_unexpl = True
+
+    fig, ax = plt.subplots(figsize=(15.5, 11))
+    ax.set_xlim(0, 17.4); ax.set_ylim(0, 16.6); ax.axis("off")
+
+    def box(x, y, w, h, text, colour, fs=10, live=True):
+        ax.add_patch(FancyBboxPatch(
+            (x - w/2, y - h/2), w, h,
+            boxstyle="round,pad=0.02,rounding_size=0.09",
+            facecolor=colour if live else PALE,
+            edgecolor="white" if live else "#5A5A5A",
+            linestyle="-" if live else (0, (3, 2)),
+            linewidth=1.6, zorder=2))
+        ax.text(x, y, text, ha="center", va="center",
+                color="white" if live else "#242424",
                 fontsize=fs, fontweight="bold", zorder=3)
 
-    def arrow(x1, y1, x2, y2, lbl=None, dx=.0, dy=.0):
-        ax.add_patch(FancyArrowPatch((x1, y1), (x2, y2), arrowstyle="-|>",
-                                     mutation_scale=13, color="#555555",
-                                     linewidth=1.2, zorder=1))
+    def arrow(x1, y1, x2, y2, lbl=None, lx=None, ly=None, live=True):
+        ax.add_patch(FancyArrowPatch(
+            (x1, y1), (x2, y2), arrowstyle="-|>", mutation_scale=14,
+            color="#555555" if live else "#9A9A9A", linewidth=1.3,
+            linestyle="-" if live else (0, (3, 2)), zorder=1))
         if lbl:
-            ax.text((x1+x2)/2 + dx, (y1+y2)/2 + dy, lbl, fontsize=8.5,
-                    style="italic", ha="center",
-                    bbox=dict(facecolor="white", edgecolor="none", pad=1))
+            ax.text(lx if lx is not None else (x1 + x2) / 2,
+                    ly if ly is not None else (y1 + y2) / 2 + .28,
+                    lbl, fontsize=9, style="italic", ha="center", va="center",
+                    color="#333333" if live else "#8A8A8A", zorder=4,
+                    bbox=dict(facecolor="white", edgecolor="none", pad=1.4))
 
-    box(6, 10.3, 4.4, .7, "Alert on feature X", BLUE)
+    SX, SW = 3.0, 4.2
 
-    box(6, 9.0, 5.4, .8, "C7  Schema change in this window?", BLUE)
-    arrow(6, 9.95, 6, 9.4)
-    box(1.7, 7.6, 2.6, .7, "INVESTIGATE", GREEN, 11)
-    arrow(3.6, 8.7, 2.5, 7.95, "yes", dx=-.2)
+    box(SX, 15.6, SW, .62, "Alert on feature X", BLUE)
+    box(SX, 14.3, SW, .95, "C7  Schema change\nin this window?", BLUE)
+    arrow(SX, 15.29, SX, 14.78)
+    box(8.6, 14.3, 2.9, .62, "INVESTIGATE", GREEN, 11, live=saw_schema)
+    arrow(5.1, 14.3, 7.15, 14.3, "yes", 6.1, 14.62, live=saw_schema)
 
-    box(7.2, 7.6, 5.2, .8, "C1  Injected target,\nwindow at/after activation?", BLUE)
-    arrow(7.2, 8.6, 7.2, 8.0, "no", dx=.35)
+    # C1 -------------------------------------------------------------------
+    box(SX, 12.4, SW, 1.05, "C1  Injected target,\nwindow at/after activation?", BLUE, 9.5)
+    arrow(SX, 13.82, SX, 12.93, "no", SX + .42, 13.38)
+    box(7.9, 12.4, 2.9, .95, "Metric is\nchi-square?", BLUE)
+    arrow(5.1, 12.4, 6.45, 12.4, "yes", 5.8, 12.72)
+    box(15.5, 12.9, 2.1, .62, "ACT", GREEN, 11.5)
+    box(11.9, 11.5, 3.4, .95, "C4  Magnitude\n\u2265 2\u00d7 threshold?", BLUE, 9.5)
+    box(15.4, 10.6, 3.0, .62, "INVESTIGATE", GREEN, 10.5)
+    arrow(9.35, 12.62, 14.45, 12.9, "yes", 11.6, 13.05)
+    arrow(9.35, 12.1, 10.2, 11.75, "no", 9.75, 11.72)
+    arrow(13.6, 11.72, 14.45, 12.68, "yes", 13.7, 12.32)
+    arrow(13.6, 11.22, 13.9, 10.8, "no", 13.55, 10.86)
 
-    box(8.6, 6.1, 4.2, .8, "C4  Magnitude \u2265 2\u00d7 threshold?", BLUE)
-    arrow(8.6, 7.25, 8.6, 6.5, "yes", dx=.4)
-    box(10.4, 4.7, 2.2, .7, "ACT", GREEN, 11)
-    box(7.6, 4.7, 2.6, .7, "INVESTIGATE", GREEN, 10)
-    arrow(9.6, 5.75, 10.3, 5.05, "yes", dx=.35)
-    arrow(7.6, 5.75, 7.6, 5.05, "no", dx=-.35)
+    # C2 -------------------------------------------------------------------
+    box(SX, 9.4, SW, 1.05, "C2  Declared dependency edge\nfrom an injected feature?", BLUE, 9.5)
+    arrow(SX, 11.87, SX, 9.93, "no", SX + .42, 10.9)
+    box(7.9, 9.4, 2.9, .62, "Edge type?", BLUE)
+    arrow(5.1, 9.4, 6.45, 9.4, "yes", 5.8, 9.72)
+    box(15.5, 8.5, 2.3, .62, "ACCEPT", GREEN, 11.5)
+    box(11.9, 7.4, 3.4, .95, "C3  Alerted in the\nclean control?", BLUE, 9.5)
+    box(15.4, 6.1, 2.6, .62, "SUPPRESS", GREEN, 11)
+    arrow(9.35, 9.25, 14.35, 8.62, "deterministic", 11.7, 9.22)
+    arrow(9.35, 9.05, 10.2, 7.7, "empirical", 9.55, 8.28)
+    arrow(13.6, 7.62, 14.35, 8.38, "no", 13.7, 8.16)
+    arrow(13.6, 7.12, 14.1, 6.3, "yes", 13.62, 6.66)
 
-    box(2.9, 6.1, 4.0, .8, "C2  Deterministic\ndependency edge?", BLUE)
-    arrow(5.4, 7.3, 3.4, 6.5, "no", dx=-.35)
-    box(1.4, 4.7, 2.2, .7, "ACCEPT", GREEN, 11)
-    arrow(2.1, 5.75, 1.5, 5.05, "yes", dx=-.35)
+    # C3 -------------------------------------------------------------------
+    box(SX, 6.5, SW, 1.05, "C3  Same feature and metric\nalerted in the clean control?", BLUE, 9.5)
+    arrow(SX, 8.87, SX, 7.03, "no", SX + .42, 7.95)
+    box(8.6, 6.5, 2.6, .62, "SUPPRESS", GREEN, 11)
+    arrow(5.1, 6.5, 7.3, 6.5, "yes", 6.2, 6.82)
 
-    box(3.4, 3.3, 4.6, .8, "C3  Alerted in the\nclean control?", BLUE)
-    arrow(3.7, 5.75, 3.5, 3.7, "no", dx=.45)
-    box(1.3, 1.7, 2.2, .7, "SUPPRESS", GREEN, 10.5)
-    arrow(2.4, 2.95, 1.5, 2.05, "yes", dx=-.35)
+    # unexplained ----------------------------------------------------------
+    box(SX, 4.0, SW, .95, "C4  Magnitude\n\u2265 2\u00d7 threshold?", BLUE, 9.5, live=saw_unexpl)
+    arrow(SX, 5.97, SX, 4.48, "no \u2014 unexplained", SX + 1.35, 5.24, live=saw_unexpl)
+    box(8.6, 4.5, 2.9, .62, "INVESTIGATE", GREEN, 10.5, live=saw_unexpl)
+    box(8.6, 2.9, 2.6, .62, "MONITOR", GREEN, 11, live=saw_unexpl)
+    arrow(5.1, 4.18, 7.15, 4.5, "yes", 6.05, 4.72, live=saw_unexpl)
+    arrow(5.1, 3.8, 7.3, 3.0, "no", 6.1, 3.14, live=saw_unexpl)
 
-    box(7.4, 1.7, 4.4, .8, "C4/C6  Magnitude large?", BLUE)
-    arrow(4.9, 3.05, 6.6, 2.1, "no", dx=.3)
-    box(6.0, .5, 2.4, .55, "INVESTIGATE", GREEN, 9.5)
-    box(9.4, .5, 2.2, .55, "MONITOR", GREEN, 10)
-    arrow(6.6, 1.35, 6.1, .78, "yes", dx=-.35)
-    arrow(8.4, 1.35, 9.2, .78, "no", dx=.3)
-
-    ax.legend(handles=[mpatches.Patch(color=BLUE, label="Decision criterion"),
-                       mpatches.Patch(color=GREEN, label="Recommended action")],
-              loc="upper left", frameon=False, fontsize=9.5)
+    handles = [mpatches.Patch(color=BLUE, label="Decision criterion"),
+               mpatches.Patch(color=GREEN, label="Recommended action")]
+    if not (saw_schema and saw_unexpl):
+        handles.append(Line2D([0], [0], color="#5A5A5A", linestyle=(0, (3, 2)),
+                              linewidth=1.6,
+                              label="Path not exercised by the experiments"))
+    ax.legend(handles=handles, loc="lower left", frameon=False, fontsize=10.5,
+              bbox_to_anchor=(0.005, 0.005))
+    ax.text(0.68, 0.02,
+            "Chi-square alerts bypass C4: the statistic has no bounded scale, so an\n"
+            "unexplained chi-square alert always reaches MONITOR.",
+            transform=ax.transAxes, ha="center", va="bottom",
+            fontsize=9, style="italic", color="#555555")
     ax.set_title("Alert Interpretation Framework: decision tree (D1)",
-                 fontsize=14, fontweight="bold", pad=10)
+                 fontsize=15, fontweight="bold", pad=14)
     fig.savefig(f"{OUT}/fig_decision_tree.png")
     plt.close(fig)
     print("fig_decision_tree.png")
+    print(f"    schema branch exercised: {saw_schema}; "
+          f"unexplained branch exercised: {saw_unexpl}")
 
 
 if __name__ == "__main__":
