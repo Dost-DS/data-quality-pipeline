@@ -15,7 +15,7 @@ import pandas as pd
 SEED = 42
 BASELINE_PATH = "great_expectations/reference_baseline.json"
 
-SCENARIOS = ["C0", "S1", "S2", "S3", "S4", "S5"]
+SCENARIOS = ["C0", "S1", "S2", "S3", "S4", "S5", "S6"]
 
 SCENARIO_LABELS = {
     "C0": "clean control",
@@ -24,6 +24,7 @@ SCENARIO_LABELS = {
     "S3": "rare-category frequency shift",
     "S4": "numerical variance shift",
     "S5": "mixed numerical and categorical",
+    "S6": "unseen category injection",
 }
 
 
@@ -127,12 +128,40 @@ def mixed(df, idx):
     ]}
 
 
+def unseen_category(df, idx, column="RatecodeID", value=88.0, fraction=0.25):
+    """Replace a fraction of records with a category absent from the baseline.
+
+    The value is checked against the persisted reference baseline before the
+    injection is applied, and the function refuses to run if the category is
+    already present. S3 was written on the unverified assumption that
+    RatecodeID 99 was novel; it is not, and the error was only found after
+    the experiments had completed. This scenario fails loudly instead.
+    """
+    baseline = _baseline()["categorical"][column]["value_counts"]
+    present = {str(k) for k in baseline}
+    if str(value) in present or str(int(value)) in present:
+        raise ValueError(
+            f"{column}={value} is already present in the reference baseline "
+            f"(categories: {sorted(present)}); choose a value that is absent")
+
+    out = df.copy()
+    rng = np.random.default_rng(SEED)
+    eligible = out.index[out.index >= idx]
+    n = int(len(eligible) * fraction)
+    chosen = rng.choice(eligible, size=n, replace=False)
+    out.loc[chosen, column] = value
+    return out, {"column": column, "unseen_value": value, "fraction": fraction,
+                 "affected_rows": int(n),
+                 "baseline_categories": sorted(present)}
+
+
 _FUNCS = {
     "S1": mean_shift,
     "S2": value_swap,
     "S3": rare_category_amplification,
     "S4": variance_shift,
     "S5": mixed,
+    "S6": unseen_category,
 }
 
 _TARGETS = {
@@ -142,6 +171,7 @@ _TARGETS = {
     "S3": ["RatecodeID"],
     "S4": ["trip_distance"],
     "S5": ["fare_amount", "payment_type"],
+    "S6": ["RatecodeID"],
 }
 
 
