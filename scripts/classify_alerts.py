@@ -18,6 +18,14 @@ PG = dict(host=os.environ.get("PG_HOST", "localhost"), port=5432,
 
 CONTROL_SCENARIO = "C0"
 
+# The classification rule is defined against a clean control replay of the
+# same configuration (Chapter 3, Section 3.6). The window-size pilot uses a
+# different slice and different window sizes, so its alerts have no control
+# to be compared against and the rule cannot be applied to them. Excluding
+# them here prevents pilot alerts being labelled UNEXPLAINED for want of a
+# comparable reference.
+EXCLUDED_SCENARIOS = ("PILOT",)
+
 
 def main():
     conn = psycopg2.connect(**PG)
@@ -26,8 +34,12 @@ def main():
 
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute("""SELECT experiment_id, scenario, activation_timestamp, ground_truth
-                       FROM dq_monitoring.experiments ORDER BY scenario""")
+                       FROM dq_monitoring.experiments
+                       WHERE scenario <> ALL(%s) ORDER BY scenario""",
+                    (list(EXCLUDED_SCENARIOS),))
         experiments = cur.fetchall()
+        print(f"experiments to classify: {len(experiments)} "
+              f"(excluding {', '.join(EXCLUDED_SCENARIOS)})")
 
         # The control's alert set is the reference for BASELINE_VARIATION.
         cur.execute("""SELECT DISTINCT d.feature_name, d.metric_name
