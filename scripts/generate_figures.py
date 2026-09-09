@@ -403,6 +403,202 @@ def fig_decision_tree():
           f"unexplained branch exercised: {saw_unexpl}")
 
 
+
+# ---------------------------------------------------------------- figure 6
+def fig_psi_binning():
+    """Maximum PSI per numerical feature against window size (pilot runs).
+
+    The mechanism behind the numerical PSI result. Bin edges are drawn over
+    the baseline's full observed range, so a feature whose range is set by an
+    extreme outlier gets bins far wider than its own variability, and no
+    plausible shift moves mass across a boundary. passenger_count is the only
+    numerical feature whose bin width is smaller than its standard deviation,
+    and the only one on which PSI responds at all.
+    """
+    df = q("""
+        SELECT (e.ground_truth->>'window_size')::int AS ws,
+               d.feature_name,
+               MAX(d.metric_value) AS max_psi
+        FROM dq_monitoring.drift_scores d
+        JOIN dq_monitoring.experiments e USING (experiment_id)
+        WHERE e.scenario = 'PILOT' AND d.metric_name = 'psi'
+          AND d.feature_type = 'numerical'
+        GROUP BY 1, 2""")
+    if df.empty:
+        print("  ! no PILOT numerical PSI rows; skipping fig_psi_binning")
+        return
+
+    ratios = {}
+    try:
+        import json
+        b = json.load(open("great_expectations/reference_baseline.json"))
+        for f, r in b["numerical"].items():
+            e = r["bin_edges"]
+            sd = r.get("std") or r.get("stddev")
+            if sd:
+                ratios[f] = (e[-1] - e[0]) / (len(e) - 1) / float(sd)
+    except Exception as exc:
+        print(f"    (bin ratios unavailable: {type(exc).__name__})")
+
+    order = sorted(df.feature_name.unique(),
+                   key=lambda f: -df[df.feature_name == f].max_psi.max())
+    palette = [BLUE, ORANGE, GREEN, RED, "#7B5EA7"]
+    markers = ["o", "s", "^", "D", "v"]
+
+    fig, ax = plt.subplots(figsize=(7.6, 5.0))
+    for i, feat in enumerate(order):
+        d = df[df.feature_name == feat].sort_values("ws")
+        lbl = feat
+        if feat in ratios:
+            lbl += f"  (bin width / SD = {ratios[feat]:.1f})"
+        ax.plot(d.ws, d.max_psi.clip(lower=1e-5), marker=markers[i % 5],
+                color=palette[i % 5], label=lbl, linewidth=2, markersize=6.5)
+
+    ax.axhline(0.2, color=GREY, linestyle="--", linewidth=1.2)
+    ax.text(3200, 0.135, "alerting threshold (0.2)", fontsize=8.5, color=GREY)
+    ax.set_xscale("log"); ax.set_yscale("log")
+    ax.set_xticks(sorted(df.ws.unique()))
+    ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
+    ax.set_xlabel("Window size (records)")
+    ax.set_ylabel("Maximum PSI observed (log scale)")
+    ax.set_title("Maximum PSI per numerical feature, unmodified data")
+    ax.legend(frameon=False, fontsize=8.5, loc="lower left")
+    fig.savefig(f"{OUT}/fig_psi_binning.png")
+    plt.close(fig)
+    print("fig_psi_binning.png")
+    for feat in order:
+        d = df[df.feature_name == feat].sort_values("ws")
+        r = f"  ratio {ratios[feat]:>6.1f}" if feat in ratios else ""
+        print(f"    {feat:<18}" + "  ".join(f"{v:9.4f}" for v in d.max_psi) + r)
+
+
+# ---------------------------------------------------------------- figure 7
+def fig_unseen_category():
+    """RatecodeID under three conditions: control, rare-category shift, unseen.
+
+    Both metrics detect the unseen category. Only one reports it on a scale
+    that can be reasoned about: PSI moves to roughly seventeen times its
+    threshold, while the chi-square statistic reaches the order of 10^11
+    because an unseen category drives the expected count to zero and the
+    value returned is a function of the regularisation floor.
+    """
+    df = q("""
+        SELECT LEFT(experiment_id, 2) AS scen, metric_name,
+               AVG(metric_value) FILTER (
+                   WHERE window_start >= (SELECT MIN(activation_timestamp)
+                                          FROM dq_monitoring.experiments
+                                          WHERE activation_timestamp IS NOT NULL)
+               ) AS post
+        FROM dq_monitoring.drift_scores
+        WHERE feature_name = 'RatecodeID'
+          AND experiment_id LIKE ANY (ARRAY['C0%', 'S3%', 'S6%'])
+        GROUP BY 1, 2""")
+    if df.empty or "S6" not in set(df.scen):
+        print("  ! S6 not present; skipping fig_unseen_category")
+        return
+
+    labels = {"C0": "C0\ncontrol",
+              "S3": "S3\nrare category\n0.88% \u2192 25%",
+              "S6": "S6\nunseen category\n0% \u2192 25%"}
+    order = ["C0", "S3", "S6"]
+    colours = [GREY, ORANGE, RED]
+
+    fig, axes = plt.subplots(1, 2, figsize=(9.6, 4.8))
+    for ax, metric, title, thr in [
+            (axes[0], "chi2", "Chi-square statistic", None),
+            (axes[1], "psi", "Population Stability Index", 0.2)]:
+        vals = [float(df[(df.scen == s) & (df.metric_name == metric)].post.iloc[0])
+                for s in order]
+        ax.bar([labels[s] for s in order], vals, color=colours,
+               edgecolor="white", width=.6)
+        ax.set_yscale("log")
+        ax.set_title(title, fontsize=11)
+        ax.set_ylabel("Post-activation mean (log scale)")
+        top = max(vals)
+        ax.set_ylim(min(vals) / 6, top * 40)
+        for i, v in enumerate(vals):
+            txt = f"{v:,.0f}" if v >= 100 else f"{v:.3f}"
+            ax.text(i, v * 1.5, txt, ha="center", fontsize=9, fontweight="bold")
+        if thr is not None:
+            ax.axhline(thr, color=GREY, linestyle="--", linewidth=1.2)
+            ax.text(-0.42, thr * 1.25, "threshold", fontsize=8, color=GREY,
+                    ha="left")
+    fig.suptitle("RatecodeID under three conditions", fontsize=13,
+                 fontweight="bold", y=1.0)
+    fig.tight_layout()
+    fig.savefig(f"{OUT}/fig_unseen_category.png")
+    plt.close(fig)
+    print("fig_unseen_category.png")
+    for _, r in df.sort_values(["metric_name", "scen"]).iterrows():
+        print(f"    {r.scen}  {r.metric_name:<5}  post = {float(r.post):,.4f}")
+
+
+# ---------------------------------------------------------------- figure 8
+def fig_metric_timeline():
+    """KS on fare_amount across the corpus: control against S1.
+
+    The only figure showing the temporal dimension directly. The control
+    series wanders because the reference is a single week in January and the
+    corpus spans a year; the S1 series separates from it at the activation
+    point and does not return.
+    """
+    act = q("""SELECT MIN(activation_timestamp) AS ts
+               FROM dq_monitoring.experiments
+               WHERE activation_timestamp IS NOT NULL""").ts.iloc[0]
+
+    df = q(f"""
+        SELECT LEFT(experiment_id, 2) AS scen, window_start, metric_value
+        FROM dq_monitoring.drift_scores
+        WHERE feature_name = 'fare_amount' AND metric_name = 'ks'
+          AND experiment_id LIKE ANY (ARRAY['C0%', 'S1%'])
+          AND window_start >= TIMESTAMPTZ '2024-01-01'
+          AND window_start <  TIMESTAMPTZ '2025-01-01'
+        ORDER BY window_start""")
+    if df.empty:
+        print("  ! no fare_amount KS rows; skipping fig_metric_timeline")
+        return
+
+    fig, ax = plt.subplots(figsize=(9.2, 4.6))
+    for scen, colour, lbl in [("C0", GREY, "C0  clean control"),
+                              ("S1", RED, "S1  mean shift injected")]:
+        d = df[df.scen == scen].sort_values("window_start")
+        if d.empty:
+            continue
+        ax.plot(d.window_start, d.metric_value, color=colour, linewidth=.5,
+                alpha=.35, zorder=2)
+        ax.plot(d.window_start, d.metric_value.rolling(50, center=True).mean(),
+                color=colour, linewidth=2.0, label=lbl, zorder=3)
+
+    ax.axvline(pd.Timestamp(act), color=BLUE, linestyle="--", linewidth=1.4,
+               zorder=4)
+    ax.text(pd.Timestamp(act), ax.get_ylim()[1] * .97, "  activation",
+            color=BLUE, fontsize=9, va="top")
+    ax.axhline(0.1, color=GREEN, linestyle=":", linewidth=1.4, zorder=1)
+    ax.text(pd.Timestamp("2024-01-10"), 0.108, "effect-size gate (D = 0.1)",
+            color=GREEN, fontsize=8.5)
+
+    ax.set_ylabel("Kolmogorov-Smirnov D")
+    ax.set_xlabel("Window start (event time)")
+    ax.set_title("KS on fare_amount across the corpus, control against S1")
+    ax.legend(frameon=False, fontsize=9, loc="upper left")
+    n_excl = 4117 - len(df[df.scen == "C0"])
+    ax.text(0.995, 0.62,
+            f"Thin lines are per-window values; bold lines a 50-window rolling mean.\n"
+            f"{n_excl} windows per run are omitted: their bounds fall outside 2024 "
+            f"(Chapter 4).",
+            transform=ax.transAxes, ha="right", va="bottom",
+            fontsize=8, style="italic", color="#555555")
+    fig.savefig(f"{OUT}/fig_metric_timeline.png")
+    plt.close(fig)
+    print("fig_metric_timeline.png")
+    for scen in ("C0", "S1"):
+        d = df[df.scen == scen]
+        if d.empty:
+            continue
+        print(f"    {scen}: {len(d):,} windows, "
+              f"D mean {d.metric_value.mean():.4f}, max {d.metric_value.max():.4f}")
+
+
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
     fig_window_pilot()
@@ -410,4 +606,7 @@ if __name__ == "__main__":
     fig_magnitude_ratio()
     fig_classification()
     fig_decision_tree()
+    fig_psi_binning()
+    fig_unseen_category()
+    fig_metric_timeline()
     print(f"\nfigures written to {OUT}/")
