@@ -203,7 +203,12 @@ def fig_magnitude_ratio():
         GROUP BY 1, 2""")
 
     df = pd.read_csv("results/recall_by_metric.csv")
-    df = df[df.scenario != "S5"].copy()          # S5 is additive with S1 and S2
+    # S5 is additive with S1 and S2 and would duplicate their bars. S6 is
+    # excluded because its chi-square ratio exceeds 10^9: the statistic is
+    # undefined under an unseen category and the value returned depends on
+    # the regularisation floor, so plotting it on a shared axis would invite
+    # a comparison the caption exists to forbid. S6 has its own figure.
+    df = df[~df.scenario.isin(["S5", "S6"])].copy()
     df = df.merge(ctrl, left_on=["injected_feature", "metric_name"],
                   right_on=["feature_name", "metric_name"], how="left")
 
