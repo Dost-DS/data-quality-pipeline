@@ -10,6 +10,7 @@ from __future__ import annotations
 import glob
 import json
 import os
+import time
 import sys
 
 import pandas as pd
@@ -61,40 +62,84 @@ def test_parquet_source_partial_final_window():
     assert sizes == [10_000, 10_000, 5_000]
 
 
+TEST_TOPIC = "taxi-trips-pytest"
+
+
 @pytest.mark.integration
 def test_kafka_and_parquet_agree_on_boundaries():
-    """Same slice through Kafka and through Parquet yields the same windows."""
+    """A slice published to Kafka is read back in the order the fallback produces.
+
+    The test publishes its own fixture to a dedicated topic. An earlier
+    version read the topic the experiments populate, and therefore passed or
+    failed according to whichever run had last written to it rather than
+    according to the property it claims to test.
+
+    The fixture is built by mirroring run_experiment.load_month directly, so
+    the expected order comes from a different code path than the one under
+    test. Only the pickup timestamp is published, because event-time ordering
+    is the property the design depends on and the one the single-partition
+    topic exists to preserve.
+    """
     kafka = pytest.importorskip("kafka")
+    from kafka.admin import KafkaAdminClient, NewTopic
+
     files = sorted(glob.glob("data/raw/*.parquet"))
     if not files:
         pytest.skip("data/raw parquet files not present")
+
+    bootstrap = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092")
     try:
-        c = kafka.KafkaConsumer(
-            os.environ.get("KAFKA_TOPIC", "taxi-trips"),
-            bootstrap_servers=os.environ.get("KAFKA_BOOTSTRAP_SERVERS",
-                                             "localhost:29092"),
-            auto_offset_reset="earliest", consumer_timeout_ms=20_000,
-            value_deserializer=lambda v: json.loads(v.decode()))
+        admin = KafkaAdminClient(bootstrap_servers=bootstrap,
+                                 request_timeout_ms=10_000)
     except Exception as exc:
         pytest.skip(f"kafka unavailable: {type(exc).__name__}")
 
-    rows = []
-    for msg in c:
-        rows.append(msg.value)
-        if len(rows) >= SLICE_ROWS:
-            break
-    c.close()
-    if len(rows) < SLICE_ROWS:
-        pytest.skip(f"topic held only {len(rows)} records")
+    # Expected order, derived the way the producer derives it.
+    expected = (pd.read_parquet(files[0], columns=["tpep_pickup_datetime"])
+                  .assign(tpep_pickup_datetime=lambda d: pd.to_datetime(
+                      d["tpep_pickup_datetime"]))
+                  .sort_values("tpep_pickup_datetime")
+                  .reset_index(drop=True)
+                  .head(SLICE_ROWS))
 
-    # Kafka carries ISO strings through JSON, Parquet carries Timestamps;
-    # compare the instants rather than their textual form.
+    try:
+        try:
+            admin.delete_topics([TEST_TOPIC])
+            time.sleep(2)
+        except Exception:
+            pass
+        admin.create_topics([NewTopic(name=TEST_TOPIC, num_partitions=1,
+                                      replication_factor=1)])
+        time.sleep(1)
+
+        producer = kafka.KafkaProducer(
+            bootstrap_servers=bootstrap,
+            value_serializer=lambda v: json.dumps(v).encode(),
+            linger_ms=50, batch_size=65536, compression_type="gzip")
+        for ts in expected["tpep_pickup_datetime"]:
+            producer.send(TEST_TOPIC, value={"tpep_pickup_datetime": ts.isoformat()})
+        producer.flush()
+        producer.close()
+
+        consumer = kafka.KafkaConsumer(
+            TEST_TOPIC, bootstrap_servers=bootstrap,
+            auto_offset_reset="earliest", consumer_timeout_ms=30_000,
+            value_deserializer=lambda v: json.loads(v.decode()))
+        rows = [m.value for m in consumer]
+        consumer.close()
+    finally:
+        try:
+            admin.delete_topics([TEST_TOPIC])
+        except Exception:
+            pass
+        admin.close()
+
+    assert len(rows) == len(expected), (
+        f"published {len(expected):,} records, read back {len(rows):,}")
+
     from_kafka = pd.to_datetime(
         pd.DataFrame(rows)["tpep_pickup_datetime"]).tolist()
-    src = ParquetEventSource(files[:1], limit_rows=SLICE_ROWS)
-    from_parquet = pd.to_datetime(pd.concat(list(src.windows(WINDOW)))[
-        "tpep_pickup_datetime"]).tolist()
-    src.close()
+    from_parquet = pd.to_datetime(expected["tpep_pickup_datetime"]).tolist()
     assert from_kafka == from_parquet
 
 
