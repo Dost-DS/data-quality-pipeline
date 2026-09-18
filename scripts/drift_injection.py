@@ -26,6 +26,7 @@ SCENARIO_LABELS = {
     "S4": "numerical variance shift",
     "S5": "mixed numerical and categorical",
     "S6": "unseen category injection",
+    "S7": "schema change, no distributional injection",
 }
 
 
