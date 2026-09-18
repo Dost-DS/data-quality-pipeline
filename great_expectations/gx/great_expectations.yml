@@ -93,5 +93,13 @@ fluent_datasources:
           taxi_batch_def:
             id: 837a14f3-99b9-4d5b-aa40-7f9ee962083e
             partitioner:
+      equiv_asset:
+        type: dataframe
+        id: 97eff142-a01c-4854-9408-3f7ade66de6c
+        batch_metadata: {}
+        batch_definitions:
+          equiv_batch:
+            id: 181ca375-179d-475b-92f2-33c0cfcb3202
+            partitioner:
 analytics_enabled:
 data_context_id: e245e8fc-38e1-4688-9caf-b51a135aef4a

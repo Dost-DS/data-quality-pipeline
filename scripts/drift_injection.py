@@ -15,7 +15,8 @@ import pandas as pd
 SEED = 42
 BASELINE_PATH = "great_expectations/reference_baseline.json"
 
-SCENARIOS = ["C0", "S1", "S2", "S3", "S4", "S5", "S6"]
+SCHEMA_BASELINE = "great_expectations/schema_baseline.json"
+SCENARIOS = ["C0", "S1", "S2", "S3", "S4", "S5", "S6", "S7"]
 
 SCENARIO_LABELS = {
     "C0": "clean control",
@@ -164,6 +165,50 @@ _FUNCS = {
     "S6": unseen_category,
 }
 
+def _schema_baseline_columns():
+    """Column names recorded in schema_baseline.json.
+
+    This is the file kafka_consumer_schema.py compares each window against, so
+    it is the authority on what counts as a new column. Accepts either a flat
+    mapping of column to type or a document with a "columns" member, because
+    the guard must not depend on which of the two the artifact happens to use.
+    """
+    import json
+    with open(SCHEMA_BASELINE, encoding="utf-8") as fh:
+        doc = json.load(fh)
+    cols = doc.get("columns", doc) if isinstance(doc, dict) else doc
+    if isinstance(cols, dict):
+        return set(cols)
+    return set(cols)
+
+
+def schema_addition(df, idx, column="trip_source_system", value="legacy_ingest_v2"):
+    """Introduce a column absent from the persisted schema baseline.
+
+    No monitored feature is altered, so the drift metrics see exactly what they
+    would see in the clean control. The schema consumer compares each window's
+    observed columns against schema_baseline.json, which is fixed, so once the
+    column appears every later window records has_schema_change.
+
+    The column is assigned only from idx onward. Rows before idx are left as
+    NaN and the producer drops the key while it is null, so the activation
+    point is the first row that carries the new field rather than the first row
+    of the file.
+    """
+    known = _schema_baseline_columns()
+    if column in known:
+        raise ValueError(
+            f"{column!r} is already present in the schema baseline; "
+            "S7 requires a column the baseline does not contain")
+
+    if column not in df.columns:
+        # object dtype: the column holds strings, and creating it as float64
+        # would make the later assignment an incompatible-dtype write.
+        df[column] = pd.Series([pd.NA] * len(df), index=df.index, dtype="object")
+    df.loc[df.index[idx:], column] = value
+    return df
+
+
 _TARGETS = {
     "C0": [],
     "S1": ["fare_amount"],
@@ -172,6 +217,8 @@ _TARGETS = {
     "S4": ["trip_distance"],
     "S5": ["fare_amount", "payment_type"],
     "S6": ["RatecodeID"],
+    # S7 alters no monitored feature; the change is structural.
+    "S7": [],
 }
 
 
@@ -198,6 +245,9 @@ def apply_scenario(df, scenario, warmup_rows):
 
     if scenario == "C0":
         meta["affected_rows"] = 0
+    if scenario == "S7":
+        return schema_addition(df, idx)
+
         return df, meta
 
     out, detail = _FUNCS[scenario](df, warmup_rows)

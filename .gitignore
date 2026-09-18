@@ -28,3 +28,6 @@ docker/volumes/
 # Env
 .env
 dashboard/
+scripts/dashboard_*.py
+scripts/build_dashboard.py
+*:Zone.Identifier

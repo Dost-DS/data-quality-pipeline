@@ -433,17 +433,20 @@ def fig_psi_binning():
         print("  ! no PILOT numerical PSI rows; skipping fig_psi_binning")
         return
 
+    # Share of the reference falling in the single most populated bin. This
+    # orders the features exactly inversely to their observed maximum PSI,
+    # which the bin-width ratio does not, and it states the mechanism more
+    # directly: PSI sums the change in each bin's share, so where nearly the
+    # whole reference sits in one bin there is nowhere for mass to move.
     ratios = {}
     try:
         import json
         b = json.load(open("great_expectations/reference_baseline.json"))
         for f, r in b["numerical"].items():
-            e = r["bin_edges"]
-            sd = r.get("std") or r.get("stddev")
-            if sd:
-                ratios[f] = (e[-1] - e[0]) / (len(e) - 1) / float(sd)
+            c = r["hist_counts"]
+            ratios[f] = 100.0 * max(c) / sum(c)
     except Exception as exc:
-        print(f"    (bin ratios unavailable: {type(exc).__name__})")
+        print(f"    (modal-bin shares unavailable: {type(exc).__name__})")
 
     order = sorted(df.feature_name.unique(),
                    key=lambda f: -df[df.feature_name == f].max_psi.max())
@@ -455,7 +458,9 @@ def fig_psi_binning():
         d = df[df.feature_name == feat].sort_values("ws")
         lbl = feat
         if feat in ratios:
-            lbl += f"  (bin width / SD = {ratios[feat]:.1f})"
+            # four decimals: trip_distance is 99.9995% and rounds to a
+            # misleading 100.00% at two, which would also contradict Table 5.6
+            lbl += f"  ({ratios[feat]:.4f}% of reference in one bin)"
         ax.plot(d.ws, d.max_psi.clip(lower=1e-5), marker=markers[i % 5],
                 color=palette[i % 5], label=lbl, linewidth=2, markersize=6.5)
 
@@ -473,7 +478,7 @@ def fig_psi_binning():
     print("fig_psi_binning.png")
     for feat in order:
         d = df[df.feature_name == feat].sort_values("ws")
-        r = f"  ratio {ratios[feat]:>6.1f}" if feat in ratios else ""
+        r = f"  modal share {ratios[feat]:>9.4f}%" if feat in ratios else ""
         print(f"    {feat:<18}" + "  ".join(f"{v:9.4f}" for v in d.max_psi) + r)
 
 

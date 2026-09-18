@@ -32,10 +32,15 @@ CRITERIA = [
                  "drift_scores.window_end",
      "interpretation": "Yes: a confirmed detection. Record the latency and go to C4."},
     {"id": "C2", "name": "Dependency",
-     "question": "Is the feature a declared dependent of a feature that has already "
-                 "alerted, and is the edge deterministic?",
-     "evidence": "feature_dependencies.yaml edge type and source",
-     "interpretation": "Yes: expected propagation, not a detector error. Accept it."},
+     "question": "Is the feature a declared dependent of an injected feature, and "
+                 "does the window close at or after the activation time?",
+     "evidence": "feature_dependencies.yaml edge type and source; "
+                 "drift_scores for the control experiment where the edge is empirical",
+     "interpretation": "A deterministic edge is an arithmetic identity and suffices "
+                       "on its own: accept. An empirical edge is a tendency, so accept "
+                       "only if the same feature and metric did not alert in the "
+                       "control; if it did, natural variation is the better "
+                       "explanation and the alert is suppressed."},
     {"id": "C3", "name": "Baseline comparison",
      "question": "Did the same feature and metric alert in the clean control replay?",
      "evidence": "drift_scores for the control experiment",
@@ -43,8 +48,11 @@ CRITERIA = [
     {"id": "C4", "name": "Practical significance",
      "question": "Does the magnitude clear twice the alerting threshold?",
      "evidence": "drift_scores.metric_value against PSI 0.4 or KS D 0.2",
-     "interpretation": "Yes: act. No: the change is detectable but small, so investigate "
-                       "before acting (Yurdakul & Naranjo, 2020)."},
+     "interpretation": "Yes: act. No: the change is detectable but small, so "
+                       "investigate before acting. The doubling rule is a design "
+                       "choice of this artifact rather than a published convention; "
+                       "no fixed threshold has a stated error rate "
+                       "(Yurdakul & Naranjo, 2020)."},
     {"id": "C5", "name": "Metric disagreement",
      "question": "Does PSI stay below threshold in a window where KS or chi-square fires?",
      "evidence": "the PSI and KS or chi-square rows for the same window and feature",

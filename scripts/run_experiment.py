@@ -90,6 +90,12 @@ def reset_topic():
 
 def to_record(row):
     r = row.to_dict()
+    # S7 only: pandas gives the added column a value in every row of the
+    # file. Emitting it as null before the activation index would make the
+    # schema consumer flag the change from the file's first window instead
+    # of from the activation point.
+    if "trip_source_system" in r and pd.isna(r["trip_source_system"]):
+        del r["trip_source_system"]
     for k, v in r.items():
         if isinstance(v, pd.Timestamp):
             r[k] = v.isoformat()

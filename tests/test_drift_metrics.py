@@ -109,3 +109,59 @@ def test_baseline_bin_width_to_sd_ratio_table():
         if sd:
             print(f"  {f:<18}{w:>10.4g}{sd:>9.4g}{w/sd:>8.2f}")
     assert True
+
+
+# ---------- S7: schema addition ----------
+
+def test_schema_addition_only_applies_from_the_activation_index():
+    """Rows before the index keep the original schema; rows after gain one column."""
+    import pandas as pd
+    from drift_injection import schema_addition
+
+    df = pd.DataFrame({"fare_amount": [1.0] * 10, "payment_type": [1] * 10})
+    before = set(df.columns)
+    out = schema_addition(df.copy(), idx=4)
+
+    assert set(out.columns) == before | {"trip_source_system"}
+    assert out["trip_source_system"].iloc[:4].isna().all()
+    assert (out["trip_source_system"].iloc[4:] == "legacy_ingest_v2").all()
+
+
+def test_schema_addition_leaves_every_monitored_feature_untouched():
+    """S7 must not perturb any value the drift metrics read."""
+    import pandas as pd
+    from drift_injection import schema_addition
+
+    df = pd.DataFrame({"fare_amount": [1.0, 2.0, 3.0, 4.0],
+                       "trip_distance": [0.5, 1.5, 2.5, 3.5],
+                       "payment_type": [1, 2, 1, 2]})
+    out = schema_addition(df.copy(), idx=2)
+    for col in ("fare_amount", "trip_distance", "payment_type"):
+        pd.testing.assert_series_equal(out[col], df[col])
+
+
+def test_schema_addition_refuses_a_column_the_baseline_already_has():
+    """The guard that S3 lacked: assert the assumption against the artifact."""
+    import pandas as pd, pytest
+    from drift_injection import schema_addition
+
+    df = pd.DataFrame({"fare_amount": [1.0, 2.0]})
+    with pytest.raises(ValueError):
+        schema_addition(df, idx=0, column="fare_amount")
+
+
+def test_null_new_column_is_dropped_from_the_published_record():
+    """A record before the activation index carries the original field count."""
+    import pandas as pd
+
+    row = pd.Series({"fare_amount": 7.5, "trip_source_system": pd.NA})
+    r = row.to_dict()
+    if "trip_source_system" in r and pd.isna(r["trip_source_system"]):
+        del r["trip_source_system"]
+    assert "trip_source_system" not in r
+
+    row2 = pd.Series({"fare_amount": 7.5, "trip_source_system": "legacy_ingest_v2"})
+    r2 = row2.to_dict()
+    if "trip_source_system" in r2 and pd.isna(r2["trip_source_system"]):
+        del r2["trip_source_system"]
+    assert r2["trip_source_system"] == "legacy_ingest_v2"
