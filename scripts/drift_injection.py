@@ -244,11 +244,16 @@ def apply_scenario(df, scenario, warmup_rows):
         "seed": SEED,
     }
 
-    if scenario == "C0":
-        meta["affected_rows"] = 0
-    if scenario == "S7":
-        return schema_addition(df, idx)
-
+    if scenario in ("C0", "S7"):
+        # Neither alters a monitored feature. S7 adds a column that is absent
+        # from the schema baseline; no row value changes, so affected_rows
+        # counts the rows that carry the new field rather than rows mutated.
+        if scenario == "S7":
+            df = schema_addition(df, warmup_rows)
+            meta["affected_rows"] = int(len(df) - warmup_rows)
+            meta["new_column"] = "trip_source_system"
+        else:
+            meta["affected_rows"] = 0
         return df, meta
 
     out, detail = _FUNCS[scenario](df, warmup_rows)
