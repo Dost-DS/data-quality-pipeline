@@ -572,6 +572,166 @@ def fig_replay_pipeline():
     print(f"    {n_runs} runs, {total_alerts:,} alerts, {n_registered} registered runs total")
 
 
+# ---------------------------------------------------------------- figure 5c
+def fig_system_architecture():
+    """Whole-system architecture: corpus to recommended action.
+
+    Static by design -- it draws the code structure (which script talks to
+    which container, and where each of the five adapter boundaries actually
+    sits in the flow), not experiment results, so it takes no database
+    query and contains no dates. fig_replay_pipeline covers per-run counts;
+    this figure covers component structure.
+    """
+    fig, ax = plt.subplots(figsize=(17.2, 21.0))
+    ax.axis("off")
+    ax.set_xlim(-0.5, 17.7)
+    ax.set_ylim(-2.0, 20.6)
+
+    PURPLE, TEAL, GOLD = "#7B5EA7", "#2E7D46", "#B8860B"
+    ADAPTER_BLUE, HOST_ORANGE, STORE_GREY = "#2E5C8A", "#D98A3D", "#888888"
+
+    def box(x, y, w, h, text, colour, fs=9.5):
+        ax.add_patch(FancyBboxPatch(
+            (x - w / 2, y - h / 2), w, h,
+            boxstyle="round,pad=0.02,rounding_size=0.1",
+            facecolor=colour, edgecolor="white", linewidth=1.6, zorder=2))
+        ax.text(x, y, text, ha="center", va="center", color="white" if colour !=
+                STORE_GREY else "#1a1a1a", fontsize=fs, fontweight="bold", zorder=3)
+
+    def arrow(x1, y1, x2, y2, dashed=False, rad=0.0, colour="#555555"):
+        ax.add_patch(FancyArrowPatch(
+            (x1, y1), (x2, y2), arrowstyle="-|>", mutation_scale=13,
+            color=colour, linewidth=1.3, connectionstyle=f"arc3,rad={rad}",
+            linestyle=(0, (4, 2)) if dashed else "-", zorder=1))
+
+    def tag(x, y, text):
+        ax.text(x, y, f"⇄ {text}", ha="center", va="center", fontsize=8.3,
+                style="italic", fontweight="bold", color=GOLD, zorder=3)
+
+    def routed(points, dashed=False, colour="#555555"):
+        """A polyline through `points`, with the arrowhead only on the last leg."""
+        xs, ys = zip(*points)
+        ax.plot(xs[:-1], ys[:-1], color=colour, linewidth=1.3,
+                linestyle=(0, (4, 2)) if dashed else "-", zorder=1)
+        arrow(xs[-2], ys[-2], xs[-1], ys[-1], dashed=dashed, colour=colour)
+
+    # SOURCE -----------------------------------------------------------
+    box(8.6, 19.6, 7.6, 0.9, "data/raw/\n12 Parquet files · 41,169,720 rows", STORE_GREY)
+    arrow(8.6, 19.15, 8.6, 18.35)
+
+    # SETUP (one-time) ---------------------------------------------------
+    box(2.9, 17.95, 4.8, 0.85, "download_dataset.py", PURPLE, 9)
+    box(8.6, 17.95, 5.2, 0.85, "init_gx_context.py\ncompute_baselines.py", PURPLE, 9)
+    box(14.3, 17.95, 4.8, 0.85, "define_expectations.py", PURPLE, 9)
+    arrow(5.3, 17.95, 6.0, 17.95)
+    arrow(11.2, 17.95, 11.9, 17.95)
+    ax.text(8.6, 17.95 + .62, "SETUP  ·  run once, before any experiment",
+            ha="center", fontsize=9, style="italic", color="#555555")
+
+    box(8.6, 16.25, 13.0, 1.15,
+        "great_expectations/\nreference_baseline.json · schema_baseline.json · "
+        "taxi_trip_suite.json · feature_dependencies.yaml", STORE_GREY, 9)
+    arrow(2.9, 17.5, 5.0, 16.7, rad=-0.15)
+    arrow(8.6, 17.5, 8.6, 16.85)
+    arrow(14.3, 17.5, 12.2, 16.7, rad=0.15)
+
+    # PER-RUN: inject, then produce --------------------------------------
+    arrow(8.6, 15.65, 8.6, 15.05)
+    box(8.6, 14.55, 9.6, 1.0,
+        "drift_injection.py\nmutates the corpus once per scenario: C0, S1–S7",
+        HOST_ORANGE, 9.5)
+    arrow(8.6, 14.05, 8.6, 13.4)
+
+    box(8.6, 12.65, 12.4, 1.5,
+        "kafka_producer.py  →  Apache Kafka (single partition)\n"
+        "EventSource: publishes every row, in order, to the topic\n"
+        "(run_experiment.py also writes the experiments row to Postgres, once)",
+        ADAPTER_BLUE, 9.3)
+    tag(8.6, 11.63, "ParquetEventSource")
+
+    ax.text(8.6, 11.35,
+            "Three consumers, own consumer group each, read the topic independently",
+            ha="center", fontsize=8.6, style="italic", color="#555555")
+    arrow(8.6, 11.85, 3.0, 10.65, rad=0.22)
+    arrow(8.6, 11.85, 8.6, 10.65)
+    arrow(8.6, 11.85, 14.7, 10.65, rad=-0.22)
+
+    # THREE CONSUMERS ------------------------------------------------------
+    box(3.0, 10.1, 5.7, 1.05, "kafka_consumer_validation.py\nValidator: validate(df) per window",
+        ADAPTER_BLUE, 9)
+    tag(3.0, 9.28, "PlainValidator")
+
+    box(8.6, 10.1, 5.4, 1.05, "kafka_consumer_drift.py\nPSI · KS · chi² per feature/metric pair",
+        TEAL, 9)
+
+    box(14.7, 10.1, 5.7, 1.05,
+        "kafka_consumer_schema.py\ncolumns compared against schema_baseline.json", TEAL, 9)
+
+    arrow(7.0, 9.55, 6.4, 8.5, rad=0.12)
+    arrow(10.2, 9.55, 10.8, 8.5, rad=-0.12)
+    box(6.4, 8.0, 4.7, 0.8, "MetricStore: write_drift_scores()", ADAPTER_BLUE, 8.6)
+    tag(6.4, 7.35, "CsvMetricStore")
+    box(10.8, 8.0, 4.7, 0.8, "RunTracker: log_params · log_metric", ADAPTER_BLUE, 8.6)
+    tag(10.8, 7.35, "JsonRunTracker")
+
+    # STORAGE ---------------------------------------------------------------
+    box(6.3, 6.0, 10.6, 1.4,
+        "PostgreSQL · dq_monitoring  (container: postgres)\n"
+        "7 tables — experiments, validation_runs, expectation_failures,\n"
+        "quarantined_rows, drift_scores, schema_snapshots, alert_classifications",
+        STORE_GREY, 9)
+    box(14.5, 6.0, 4.4, 1.05, "MLflow tracking\n(container: mlflow)", STORE_GREY, 9)
+
+    arrow(3.0, 9.55, 4.6, 6.75, rad=0.18)          # validation -> postgres
+    arrow(6.4, 7.55, 6.3, 6.75)                      # metricstore -> postgres
+    routed([(14.7, 9.3), (17.0, 9.3), (17.0, 5.0), (9.0, 5.0), (9.0, 5.35)])  # schema -> postgres
+    arrow(10.8, 7.55, 13.3, 6.6, rad=-0.15)          # runtracker -> mlflow
+
+    # POST-HOC ANALYSIS -------------------------------------------------------
+    arrow(5.6, 5.3, 5.0, 4.4)
+    box(4.9, 3.9, 8.2, 1.0,
+        "classify_alerts.py\nAlert Classifier — labels every alert, fixed precedence",
+        HOST_ORANGE, 9)
+    arrow(4.9, 3.4, 4.9, 2.95)
+    box(4.9, 2.45, 8.2, 1.0,
+        "apply_framework.py\nInterpretation Framework — recommended action per alert",
+        HOST_ORANGE, 9)
+
+    box(14.4, 3.9, 6.4, 1.15,
+        "Apache Airflow · webserver + scheduler containers\n"
+        "DAGs read dq_monitoring on a schedule", ADAPTER_BLUE, 8.8)
+    tag(14.4, 3.1, "SequentialScheduler")
+    ax.text(14.4, 2.75, "reads stored results; not on the run's critical path",
+            ha="center", fontsize=7.8, style="italic", color="#555555")
+    arrow(9.5, 6.2, 12.0, 4.45, dashed=True, rad=-0.2)
+
+    arrow(3.6, 1.95, 2.6, 1.35, rad=0.1)
+    arrow(6.2, 1.95, 7.2, 1.35, rad=-0.1)
+    box(2.6, 0.85, 6.0, 1.0, "build_result_tables.py · generate_figures.py\n→ results/ · figures/",
+        STORE_GREY, 8.8)
+    box(8.8, 0.85, 5.8, 1.0, "blind_mode_eval.py · blind_mode_v2.py\n→ RQ4 evaluation",
+        STORE_GREY, 8.8)
+
+    # legend ---------------------------------------------------------------
+    legend_items = [(PURPLE, "One-time setup"), (HOST_ORANGE, "Per-run / post-hoc host process"),
+                     (ADAPTER_BLUE, "Adapter boundary (primary shown)"),
+                     (TEAL, "Stream processing"), (STORE_GREY, "Stored output")]
+    ly = -1.3
+    lx = 0.0
+    for colour, label in legend_items:
+        ax.add_patch(plt.Rectangle((lx, ly - .11), .3, .22, facecolor=colour, edgecolor="none"))
+        ax.text(lx + .42, ly, label, fontsize=8.8, va="center", ha="left", color="#222222")
+        lx += .42 + len(label) * .078 + .55
+    ax.text(lx + .3, ly, "⇄ gold text = fallback implementation, evidenced by an equivalence test",
+            fontsize=8.3, style="italic", va="center", ha="left", color=GOLD)
+
+    ax.set_title("System architecture: corpus to recommended action",
+                 fontsize=15, fontweight="bold", pad=18)
+    fig.savefig(f"{OUT}/fig_system_architecture.png")
+    plt.close(fig)
+    print("fig_system_architecture.png")
+
+
 _NUM_WORDS = {5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine",
               10: "ten", 12: "twelve", 13: "thirteen"}
 
@@ -788,6 +948,7 @@ if __name__ == "__main__":
     fig_classification()
     fig_decision_tree()
     fig_replay_pipeline()
+    fig_system_architecture()
     fig_psi_binning()
     fig_unseen_category()
     fig_metric_timeline()
