@@ -17,6 +17,12 @@ verified against its implementation:
                      description. The previous version omitted the empirical
                      dependency edge entirely and routed chi-square through a
                      magnitude test the implementation skips.
+
+  fig_replay_pipeline  Added when S7 was run. Previously hand-drawn and kept
+                     outside this script, so the S7 row and the run/alert
+                     counts had to be edited by hand and were not; this
+                     version queries the eight runs and their alert counts
+                     from the database instead.
 """
 import os
 
@@ -408,6 +414,171 @@ def fig_decision_tree():
           f"unexplained branch exercised: {saw_unexpl}")
 
 
+# ---------------------------------------------------------------- figure 5b
+def fig_replay_pipeline():
+    """Configure / replay / analyse pipeline, one row per registered run.
+
+    The run list, dates and alert totals are queried so that adding a
+    scenario (as S7 did) only requires re-running this script, not redrawing
+    the diagram by hand.
+    """
+    runs = q("""
+        SELECT e.scenario, e.started_at::date AS run_date, COUNT(ac.id) AS alerts
+        FROM dq_monitoring.experiments e
+        LEFT JOIN dq_monitoring.alert_classifications ac
+               ON ac.experiment_id = e.experiment_id
+        WHERE e.scenario <> 'PILOT'
+        GROUP BY e.scenario, e.started_at
+        ORDER BY e.started_at""")
+    if runs.empty:
+        print("  ! no non-pilot runs found; skipping fig_replay_pipeline")
+        return
+
+    total_alerts = int(runs.alerts.sum())
+    n_runs = len(runs)
+    n_registered = 5 + n_runs  # five pilot window-size replays, fixed
+
+    injected = {"C0": "clean control", "S1": "mean shift · fare_amount",
+                "S2": "value swap · payment_type",
+                "S3": "rare category · RatecodeID",
+                "S4": "variance shift · trip_distance",
+                "S5": "mixed · fare + payment",
+                "S6": "unseen category · RatecodeID",
+                "S7": "schema change · trip_source_system"}
+    no_injection = {"C0", "S7"}  # grouped in drift_injection.apply_scenario()
+
+    fig, ax = plt.subplots(figsize=(14.6, 15.5))
+    row_h, row_w = 0.66, 4.9
+    step = row_h + .12
+    n = len(runs)
+    vx = 11.1  # x-centre of the right-hand (host process / outcome) column
+
+    def box(x, y, w, h, text, colour, fs=10.5, style="round,pad=0.02,rounding_size=0.09"):
+        ax.add_patch(FancyBboxPatch((x - w / 2, y - h / 2), w, h, boxstyle=style,
+                                     facecolor=colour, edgecolor="white",
+                                     linewidth=1.6, zorder=2))
+        ax.text(x, y, text, ha="center", va="center", color="#1a1a1a" if colour in
+                (GREY, "#EFEFEF") else "white", fontsize=fs, fontweight="bold", zorder=3)
+
+    def arrow(x1, y1, x2, y2, dashed=False, colour="#555555", rad=0.0):
+        ax.add_patch(FancyArrowPatch((x1, y1), (x2, y2), arrowstyle="-|>",
+                                     mutation_scale=13, color=colour, linewidth=1.3,
+                                     linestyle=(0, (4, 2)) if dashed else "-",
+                                     connectionstyle=f"arc3,rad={rad}", zorder=1))
+
+    ax.axis("off")
+
+    # CONFIGURE -------------------------------------------------------------
+    cfg_y = 3 * step + n * step + 4.6
+    box(2.7, cfg_y, 6.2, 1.15, "pilot_window_size.py\n5 window sizes · 200,000-row clean slice · February",
+        "#7B5EA7", 8.6)
+    arrow(5.85, cfg_y, 6.75, cfg_y)
+    box(10.0, cfg_y, 6.2, 1.15, "window size fixed at 10,000\nchosen before any scenario was run", GREY, 8.6)
+    ax.text(2.7, cfg_y - 1.0,
+            "Re-run to record feature_type, so PSI could be reported separately for\n"
+            "numerical and categorical features. Two replays agreed.",
+            fontsize=8.2, style="italic", ha="center", color="#444444")
+
+    # REPLAY ------------------------------------------------------------------
+    rect_top = cfg_y - 2.1
+    replay_top = rect_top - 1.1
+    replay_bottom = replay_top - (n - 1) * step
+    rect_bottom = replay_bottom - row_h / 2 - .35
+    ax.add_patch(plt.Rectangle((0.15, rect_bottom), 5.75, rect_top - rect_bottom,
+                               facecolor="none", edgecolor="#888888",
+                               linestyle=(0, (3, 2)), linewidth=1.2, zorder=0))
+    ax.text(0.35, rect_top - .3,
+            "Each run: reset the topic, replay 41,169,720 rows,\nthen three consumers. ~3 hours.",
+            fontsize=8.2, style="italic", ha="left", va="top", color="#444444")
+
+    row_y = {}
+    for i, r in runs.iterrows():
+        y = replay_top - i * step
+        row_y[r.scenario] = y
+        colour = "#C0435A" if r.scenario in no_injection else "#2E7D46"
+        box(2.7, y, row_w, row_h, f"{r.scenario}   {injected[r.scenario]}", colour, 10)
+        ax.text(6.3, y, f"{int(r.alerts):,} alerts", fontsize=8.5, color="#333333", ha="left", va="center")
+
+    # verify_experiment.py gate: routed above the row stack so it never
+    # crosses the per-row date/alert text.
+    verify_y = replay_top + .95
+    box(vx, verify_y, 5.4, 1.35, "verify_experiment.py\nrun between replays · checks five tables\n"
+        "are populated and prints the activation point", "#D98A3D", 8.4)
+    ax.text(vx + .35, verify_y - .68, "per-run gate", fontsize=8, style="italic", color="#7a5122", ha="left")
+    arrow(3.3, rect_top, vx - 2.55, verify_y + .15, dashed=True, rad=-0.25)
+    ax.text(5.4, rect_top + .55, "after each run", fontsize=7.8, style="italic", color="#666666", ha="center")
+
+    dq_y = rect_bottom - 1.15
+    box(vx, dq_y, 5.4, 1.35,
+        f"dq_monitoring\n7 tables · {total_alerts:,} alerts across the {_num_word(n_runs)} runs\n"
+        f"4,117 windows and 90,574 scores per run", GREY, 8.4)
+    arrow(vx, verify_y - .68, vx, dq_y + .68)
+    ax.text(vx, dq_y - .85, f"all {_num_word(n_runs)} runs must be complete", fontsize=8,
+            style="italic", color="#444444", ha="center")
+    arrow(3.3, rect_bottom, vx - 2.6, dq_y + .5, rad=0.18)
+
+    # ANALYSE -----------------------------------------------------------------
+    an_y1 = dq_y - 2.35
+    box(2.7, an_y1, 7.8, 1.55,
+        "classify_alerts.py · apply_framework.py\nrequires C0 present: it is the reference for "
+        "BASELINE_VARIATION\nTRUNCATE then rebuild, so every run is relabelled together",
+        "#D98A3D", 7.9)
+    arrow(3.3, rect_bottom, 2.7, an_y1 + .775, rad=-0.12)
+
+    an_y2 = an_y1 - 1.85
+    box(2.7, an_y2, 6.6, 1.2,
+        "build_result_tables · generate_figures ·\nblind_mode_eval · blind_mode_v2\n"
+        "8 CSV files · 8 PNG files · the RQ4 evaluation", "#D98A3D", 8.3)
+    arrow(2.7, an_y1 - .775, 2.7, an_y2 + .6)
+
+    box(vx, an_y1, 5.4, 2.05,
+        "What the sequence constrains\nClassification cannot run before C0 exists.\n"
+        "Adding a scenario relabels every earlier run.\n"
+        "S6 was added after S1–S5 and forced a full\nreclassification: 82,816 → 97,643.\n"
+        "S7 was added after S1–S6 and forced a full\nreclassification: 97,643 → 108,665.",
+        GREY, 8.0)
+    arrow(6.6, an_y1, vx - 2.7, an_y1, dashed=True)
+
+    # caption -------------------------------------------------------------
+    n_pilot = 5
+    cap_y = an_y2 - 1.5
+    ax.text(0.15, cap_y,
+            f"{_num_word(n_pilot + n_runs).capitalize()} registered runs: {_num_word(n_pilot)} pilot replays "
+            f"over a 200,000-row slice, and {_num_word(n_runs)} full replays of 41,169,720 rows each.\n"
+            f"The corpus was streamed in full {_num_word(n_runs)} times. Every replay recreates the Kafka "
+            "topic with a single partition, so no run inherits state\n"
+            "from another. The activation point is identical in all "
+            f"{_num_word(n_runs)}: row 20,584,860, event time 2024-07-03 23:35:25. The pilot rows in the\n"
+            "database are from a later re-run of the window-size study, not the original one.",
+            fontsize=8.2, style="italic", color="#444444", ha="left", va="top")
+
+    legend_items = [
+        ("#7B5EA7", "Configuration study"), ("#C0435A", "Clean/no-injection replay"),
+        ("#2E7D46", "Drift-injection replay"), ("#D98A3D", "Host process"),
+        (GREY, "Outcome or stored state"),
+    ]
+    leg_y = cap_y - 1.6
+    lx = 0.15
+    for colour, label in legend_items:
+        ax.add_patch(plt.Rectangle((lx, leg_y - .11), .3, .22, facecolor=colour, edgecolor="none"))
+        ax.text(lx + .42, leg_y, label, fontsize=8.8, va="center", ha="left", color="#222222")
+        lx += .42 + len(label) * .082 + .5
+
+    ax.set_xlim(-1.3, 15.6)
+    ax.set_ylim(leg_y - .7, cfg_y + 1.0)
+    fig.savefig(f"{OUT}/fig_replay_pipeline.png")
+    plt.close(fig)
+    print("fig_replay_pipeline.png")
+    print(f"    {n_runs} runs, {total_alerts:,} alerts, {n_registered} registered runs total")
+
+
+_NUM_WORDS = {5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine",
+              10: "ten", 12: "twelve", 13: "thirteen"}
+
+
+def _num_word(n):
+    return _NUM_WORDS.get(n, str(n))
+
 
 # ---------------------------------------------------------------- figure 6
 def fig_psi_binning():
@@ -616,6 +787,7 @@ if __name__ == "__main__":
     fig_magnitude_ratio()
     fig_classification()
     fig_decision_tree()
+    fig_replay_pipeline()
     fig_psi_binning()
     fig_unseen_category()
     fig_metric_timeline()
