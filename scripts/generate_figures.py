@@ -574,133 +574,163 @@ def fig_replay_pipeline():
 
 # ---------------------------------------------------------------- figure 5c
 def fig_system_architecture():
-    """Whole-system architecture, redrawn as one strictly linear flow.
+    """Whole-system architecture: corpus to recommended action, full detail.
 
-    The first version packed in every script, table and adapter name and
-    ended up with a dozen boxes and crossing arrows -- accurate, but not
-    readable at a glance. This version keeps exactly one path top to
-    bottom (the one genuine fan-out, the three parallel checks, is drawn
-    as three columns inside a single stage instead of three boxes with
-    converging arrows), leads with a plain-language line per stage, and
-    keeps script/component names as a small caption underneath for anyone
-    who wants to trace a stage back to the code. Static and dateless, like
-    the technical version it replaces.
+    Restores the full-detail layout (every script, table, and adapter
+    boundary) after a plainer 7-stage version proved too thin on detail for
+    a technical reader; this keeps that detail but draws every connector
+    thick and near-black instead of the original's 1.3pt mid-grey lines,
+    which were hard to see at a glance. Static and dateless -- it draws
+    code structure, not experiment results, so it takes no database query.
     """
-    fig, ax = plt.subplots(figsize=(12.6, 22.5))
+    fig, ax = plt.subplots(figsize=(17.2, 21.4))
     ax.axis("off")
-    ax.set_xlim(0, 13.4)
-    ax.set_ylim(-1.6, 23.2)
+    ax.set_xlim(-0.5, 17.7)
+    ax.set_ylim(-2.0, 20.8)
 
-    GREY, PURPLE, BLUE, ORANGE = "#6E6E6E", "#7B5EA7", "#2E5C8A", "#C0622A"
-    ARROW = "#222222"
+    PURPLE, TEAL, GOLD = "#7B5EA7", "#2E7D46", "#B8860B"
+    ADAPTER_BLUE, HOST_ORANGE, STORE_GREY = "#2E5C8A", "#D98A3D", "#888888"
+    LINE = "#1A1A1A"
 
-    def stage(n, y, h, title, desc, caption, colour, cx=6.7, w=11.4):
+    def box(x, y, w, h, text, colour, fs=9.5):
         ax.add_patch(FancyBboxPatch(
-            (cx - w / 2, y - h / 2), w, h,
-            boxstyle="round,pad=0.02,rounding_size=0.12",
-            facecolor=colour, edgecolor="white", linewidth=1.8, zorder=2))
-        # step number, in its own circle to the left of the stage
-        ax.add_patch(plt.Circle((cx - w / 2 - .62, y), .40, facecolor=colour,
-                                edgecolor="white", linewidth=1.8, zorder=3))
-        ax.text(cx - w / 2 - .62, y, str(n), ha="center", va="center",
-                fontsize=15, fontweight="bold", color="white", zorder=4)
-        ax.text(cx, y + h * .21, title, ha="center", va="center", fontsize=15.5,
-                fontweight="bold", color="white", zorder=3)
-        ax.text(cx, y - h * .06, desc, ha="center", va="center", fontsize=10.8,
-                color="white", zorder=3, wrap=True)
-        if caption:
-            ax.text(cx, y - h * .40, caption, ha="center", va="center", fontsize=8.6,
-                    style="italic", color="#E7E7E7", zorder=3)
+            (x - w / 2, y - h / 2), w, h,
+            boxstyle="round,pad=0.02,rounding_size=0.1",
+            facecolor=colour, edgecolor="white", linewidth=2.0, zorder=2))
+        ax.text(x, y, text, ha="center", va="center", color="white" if colour !=
+                STORE_GREY else "#1a1a1a", fontsize=fs, fontweight="bold", zorder=3)
 
-    def down_arrow(y1, y2, cx=6.7):
-        ax.annotate("", xy=(cx, y2), xytext=(cx, y1),
-                    arrowprops=dict(arrowstyle="-|>", color=ARROW, lw=3.4,
-                                    mutation_scale=28), zorder=1)
+    def arrow(x1, y1, x2, y2, dashed=False, rad=0.0, colour=LINE, lw=3.0):
+        ax.add_patch(FancyArrowPatch(
+            (x1, y1), (x2, y2), arrowstyle="-|>", mutation_scale=22,
+            color=colour, linewidth=lw, connectionstyle=f"arc3,rad={rad}",
+            linestyle=(0, (5, 3)) if dashed else "-", zorder=1,
+            shrinkA=2, shrinkB=2))
 
-    # 1. SOURCE ----------------------------------------------------------
-    stage(1, 21.6, 1.7, "THE RAW DATA",
-          "One year of real New York City taxi trips — about 41 million individual rides",
-          "data/raw/  ·  12 monthly files", GREY)
-    down_arrow(20.75, 19.85)
+    def tag(x, y, text):
+        ax.text(x, y, f"⇄ {text}", ha="center", va="center", fontsize=8.6,
+                style="italic", fontweight="bold", color=GOLD, zorder=3)
 
-    # 2. SETUP -------------------------------------------------------------
-    stage(2, 19.0, 1.9, "LEARN WHAT “NORMAL” LOOKS LIKE",
-          "Before any test run, the system studies one clean week of data and\n"
-          "records typical values and simple quality rules",
-          "compute_baselines.py  ·  define_expectations.py", PURPLE)
-    down_arrow(18.05, 16.35)
+    def routed(points, dashed=False, colour=LINE):
+        """A polyline through `points`, with the arrowhead only on the last leg."""
+        xs, ys = zip(*points)
+        ax.plot(xs[:-1], ys[:-1], color=colour, linewidth=3.0,
+                linestyle=(0, (5, 3)) if dashed else "-", zorder=1,
+                solid_capstyle="round")
+        arrow(xs[-2], ys[-2], xs[-1], ys[-1], dashed=dashed, colour=colour)
 
-    # 3. REPLAY --------------------------------------------------------------
-    stage(3, 15.5, 1.9, "REPLAY THE DATA LIKE A LIVE FEED",
-          "Every trip record is sent through the system one at a time, in order,\n"
-          "as if it were arriving right now",
-          "Apache Kafka  ·  kafka_producer.py", BLUE)
-    down_arrow(14.55, 12.85)
+    # SOURCE -----------------------------------------------------------
+    box(8.6, 19.7, 7.6, 0.9, "data/raw/\n12 Parquet files · 41,169,720 rows", STORE_GREY)
+    arrow(8.6, 19.25, 8.6, 18.45)
 
-    # 4. THREE CHECKS, one stage / three columns -----------------------------
-    y4, h4, w4 = 11.55, 3.1, 11.4
-    cx = 6.7
-    ax.add_patch(FancyBboxPatch((cx - w4 / 2, y4 - h4 / 2), w4, h4,
-                                boxstyle="round,pad=0.02,rounding_size=0.12",
-                                facecolor=BLUE, edgecolor="white", linewidth=1.8, zorder=2))
-    ax.add_patch(plt.Circle((cx - w4 / 2 - .62, y4), .40, facecolor=BLUE,
-                            edgecolor="white", linewidth=1.8, zorder=3))
-    ax.text(cx - w4 / 2 - .62, y4, "4", ha="center", va="center", fontsize=15,
-            fontweight="bold", color="white", zorder=4)
-    ax.text(cx, y4 + h4 * .38, "THREE CHECKS RUN AT THE SAME TIME",
-            ha="center", va="center", fontsize=15.5, fontweight="bold", color="white", zorder=3)
-    ax.text(cx, y4 + h4 * .26, "each one reads the stream independently, on its own copy",
-            ha="center", va="center", fontsize=9.6, style="italic", color="#DCE6F0", zorder=3)
+    # SETUP (one-time) ---------------------------------------------------
+    box(2.9, 18.05, 4.8, 0.85, "download_dataset.py", PURPLE, 9)
+    box(8.6, 18.05, 5.2, 0.85, "init_gx_context.py\ncompute_baselines.py", PURPLE, 9)
+    box(14.3, 18.05, 4.8, 0.85, "define_expectations.py", PURPLE, 9)
+    arrow(5.3, 18.05, 6.0, 18.05)
+    arrow(11.2, 18.05, 11.9, 18.05)
+    ax.text(8.6, 18.05 + .62, "SETUP  ·  run once, before any experiment",
+            ha="center", fontsize=9, style="italic", color="#555555")
 
-    col_titles = ["IS IT VALID?", "HAS IT DRIFTED?", "HAS THE SHAPE CHANGED?"]
-    col_desc = [
-        "Missing values, out-of-\nrange numbers, unexpected\ncategories",
-        "Has the statistical pattern\nof the data moved away\nfrom the baseline?",
-        "Were columns added,\nremoved, or changed\nsince the baseline?",
-    ]
-    col_cap = ["kafka_consumer_validation.py", "kafka_consumer_drift.py", "kafka_consumer_schema.py"]
-    col_x = [cx - 3.6, cx, cx + 3.6]
-    for cxi, ti, di, ci in zip(col_x, col_titles, col_desc, col_cap):
-        ax.text(cxi, y4 + .0, ti, ha="center", va="center", fontsize=11.5,
-                fontweight="bold", color="white", zorder=3)
-        ax.text(cxi, y4 - .78, di, ha="center", va="center", fontsize=9.0,
-                color="#EAEFF6", zorder=3)
-        ax.text(cxi, y4 - h4 / 2 + .28, ci, ha="center", va="center", fontsize=7.8,
-                style="italic", color="#DCE6F0", zorder=3)
-    for xdiv in (cx - 1.8, cx + 1.8):
-        ax.plot([xdiv, xdiv], [y4 - h4 / 2 + .18, y4 + h4 / 2 - .88],
-                color="white", linewidth=1.1, alpha=.4, zorder=3)
+    box(8.6, 16.35, 13.0, 1.15,
+        "great_expectations/\nreference_baseline.json · schema_baseline.json · "
+        "taxi_trip_suite.json · feature_dependencies.yaml", STORE_GREY, 9)
+    arrow(2.9, 17.6, 5.0, 16.8, rad=-0.15)
+    arrow(8.6, 17.6, 8.6, 16.95)
+    arrow(14.3, 17.6, 12.2, 16.8, rad=0.15)
 
-    down_arrow(y4 - h4 / 2 - .02, 8.85)
+    # PER-RUN: inject, then produce --------------------------------------
+    arrow(8.6, 15.75, 8.6, 15.15)
+    box(8.6, 14.65, 9.6, 1.0,
+        "drift_injection.py\nmutates the corpus once per scenario: C0, S1–S7",
+        HOST_ORANGE, 9.5)
+    arrow(8.6, 14.15, 8.6, 13.5)
 
-    # 5. STORAGE -------------------------------------------------------------
-    stage(5, 8.1, 1.7, "EVERYTHING GETS SAVED",
-          "All three checks write what they found into one shared database, so\n"
-          "nothing is lost between steps",
-          "PostgreSQL  ·  7 tables", GREY)
-    down_arrow(7.25, 5.55)
+    box(8.6, 12.75, 12.4, 1.5,
+        "kafka_producer.py  →  Apache Kafka (single partition)\n"
+        "EventSource: publishes every row, in order, to the topic\n"
+        "(run_experiment.py also writes the experiments row to Postgres, once)",
+        ADAPTER_BLUE, 9.3)
+    tag(8.6, 11.73, "ParquetEventSource")
 
-    # 6. DECIDE -------------------------------------------------------------
-    stage(6, 4.8, 2.1, "SEPARATE NOISE FROM REAL PROBLEMS",
-          "Every flagged result is compared against a run on known-clean data,\n"
-          "so routine variation is told apart from an actual incident",
-          "classify_alerts.py  ·  apply_framework.py", ORANGE)
-    down_arrow(3.75, 2.05)
+    ax.text(8.6, 11.45,
+            "Three consumers, own consumer group each, read the topic independently",
+            ha="center", fontsize=8.6, style="italic", color="#555555")
+    arrow(8.6, 11.95, 3.0, 10.75, rad=0.22)
+    arrow(8.6, 11.95, 8.6, 10.75)
+    arrow(8.6, 11.95, 14.7, 10.75, rad=-0.22)
 
-    # 7. OUTPUT -------------------------------------------------------------
-    stage(7, 1.3, 1.7, "REPORTS AND FIGURES",
-          "Every table and chart used in the thesis is generated straight from\n"
-          "this database — nothing is typed in by hand",
-          "results/  ·  figures/", GREY)
+    # THREE CONSUMERS ------------------------------------------------------
+    box(3.0, 10.2, 5.7, 1.05, "kafka_consumer_validation.py\nValidator: validate(df) per window",
+        ADAPTER_BLUE, 9)
+    tag(3.0, 9.38, "PlainValidator")
 
-    # footnote -----------------------------------------------------------
-    ax.text(cx, -1.15,
-            "Every step in steps 2–6 also has a second, independent version, tested to\n"
-            "behave the same way — so the pipeline is not locked into one specific tool.",
-            ha="center", va="center", fontsize=9.6, style="italic", color="#444444")
+    box(8.6, 10.2, 5.4, 1.05, "kafka_consumer_drift.py\nPSI · KS · chi² per feature/metric pair",
+        TEAL, 9)
 
-    ax.set_title("How the pipeline works: from raw data to a recommended action",
-                 fontsize=17.5, fontweight="bold", pad=20)
+    box(14.7, 10.2, 5.7, 1.05,
+        "kafka_consumer_schema.py\ncolumns compared against schema_baseline.json", TEAL, 9)
+
+    arrow(7.0, 9.65, 6.4, 8.6, rad=0.12)
+    arrow(10.2, 9.65, 10.8, 8.6, rad=-0.12)
+    box(6.4, 8.1, 4.7, 0.8, "MetricStore: write_drift_scores()", ADAPTER_BLUE, 8.6)
+    tag(6.4, 7.45, "CsvMetricStore")
+    box(10.8, 8.1, 4.7, 0.8, "RunTracker: log_params · log_metric", ADAPTER_BLUE, 8.6)
+    tag(10.8, 7.45, "JsonRunTracker")
+
+    # STORAGE ---------------------------------------------------------------
+    box(6.3, 6.05, 10.6, 1.4,
+        "PostgreSQL · dq_monitoring  (container: postgres)\n"
+        "7 tables — experiments, validation_runs, expectation_failures,\n"
+        "quarantined_rows, drift_scores, schema_snapshots, alert_classifications",
+        STORE_GREY, 9)
+    box(14.5, 6.05, 4.4, 1.05, "MLflow tracking\n(container: mlflow)", STORE_GREY, 9)
+
+    arrow(3.0, 9.65, 4.6, 6.8, rad=0.18)            # validation -> postgres
+    arrow(6.4, 7.65, 6.3, 6.8)                        # metricstore -> postgres
+    routed([(14.7, 9.4), (17.0, 9.4), (17.0, 5.1), (9.0, 5.1), (9.0, 5.4)])  # schema -> postgres
+    arrow(10.8, 7.65, 13.3, 6.65, rad=-0.15)          # runtracker -> mlflow
+
+    # POST-HOC ANALYSIS -------------------------------------------------------
+    arrow(5.6, 5.35, 5.0, 4.45)
+    box(4.9, 3.95, 8.2, 1.0,
+        "classify_alerts.py\nAlert Classifier — labels every alert, fixed precedence",
+        HOST_ORANGE, 9)
+    arrow(4.9, 3.45, 4.9, 3.0)
+    box(4.9, 2.5, 8.2, 1.0,
+        "apply_framework.py\nInterpretation Framework — recommended action per alert",
+        HOST_ORANGE, 9)
+
+    box(14.4, 3.95, 6.4, 1.15,
+        "Apache Airflow · webserver + scheduler containers\n"
+        "DAGs read dq_monitoring on a schedule", ADAPTER_BLUE, 8.8)
+    tag(14.4, 3.15, "SequentialScheduler")
+    ax.text(14.4, 2.8, "reads stored results; not on the run's critical path",
+            ha="center", fontsize=7.8, style="italic", color="#555555")
+    arrow(9.5, 6.25, 12.0, 4.5, dashed=True, rad=-0.2, colour="#555555", lw=2.4)
+
+    arrow(3.6, 2.0, 2.6, 1.4, rad=0.1)
+    arrow(6.2, 2.0, 7.2, 1.4, rad=-0.1)
+    box(2.6, 0.9, 6.0, 1.0, "build_result_tables.py · generate_figures.py\n→ results/ · figures/",
+        STORE_GREY, 8.8)
+    box(8.8, 0.9, 5.8, 1.0, "blind_mode_eval.py · blind_mode_v2.py\n→ RQ4 evaluation",
+        STORE_GREY, 8.8)
+
+    # legend ---------------------------------------------------------------
+    legend_items = [(PURPLE, "One-time setup"), (HOST_ORANGE, "Per-run / post-hoc host process"),
+                     (ADAPTER_BLUE, "Adapter boundary (primary shown)"),
+                     (TEAL, "Stream processing"), (STORE_GREY, "Stored output")]
+    ly = -1.3
+    lx = 0.0
+    for colour, label in legend_items:
+        ax.add_patch(plt.Rectangle((lx, ly - .11), .3, .22, facecolor=colour, edgecolor="none"))
+        ax.text(lx + .42, ly, label, fontsize=8.8, va="center", ha="left", color="#222222")
+        lx += .42 + len(label) * .078 + .55
+    ax.text(lx + .3, ly, "⇄ gold text = fallback implementation, evidenced by an equivalence test",
+            fontsize=8.3, style="italic", va="center", ha="left", color=GOLD)
+
+    ax.set_title("System architecture: corpus to recommended action",
+                 fontsize=16, fontweight="bold", pad=18)
     fig.savefig(f"{OUT}/fig_system_architecture.png")
     plt.close(fig)
     print("fig_system_architecture.png")
