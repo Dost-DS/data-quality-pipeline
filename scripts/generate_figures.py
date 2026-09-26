@@ -305,17 +305,30 @@ def fig_decision_tree():
           magnitude >= 2x threshold        -> INVESTIGATE
           otherwise                        -> MONITOR
     """
+    # Which paths were exercised is read from the stored evidence, not assumed:
+    # each alert records the rule that labelled it (alert_classifier.classify).
     try:
         ex = q("""SELECT
               (SELECT COUNT(*) FROM dq_monitoring.schema_snapshots
                WHERE has_schema_change)     AS schema_changes,
               (SELECT COUNT(*) FROM dq_monitoring.alert_classifications
-               WHERE label = 'UNEXPLAINED') AS unexplained""")
+               WHERE label = 'UNEXPLAINED') AS unexplained,
+              (SELECT COUNT(*) FROM dq_monitoring.alert_classifications
+               WHERE evidence->>'rule' = 'empirical dependency edge, absent from control')
+                                            AS empirical_accept,
+              (SELECT COUNT(*) FROM dq_monitoring.alert_classifications
+               WHERE evidence->>'rule' = 'empirical edge, but the control also alerted here')
+                                            AS empirical_suppress""")
         saw_schema = int(ex.schema_changes.iloc[0]) > 0
         saw_unexpl = int(ex.unexplained.iloc[0]) > 0
+        saw_emp_accept = int(ex.empirical_accept.iloc[0]) > 0
+        saw_emp_suppress = int(ex.empirical_suppress.iloc[0]) > 0
     except Exception as exc:
-        print(f"    ! could not query exercised branches ({type(exc).__name__})")
-        saw_schema = saw_unexpl = True
+        # Drawing every path as exercised would overstate coverage, so skip.
+        print(f"  ! could not query exercised branches ({type(exc).__name__}); "
+              "skipping fig_decision_tree")
+        return
+    saw_empirical = saw_emp_accept or saw_emp_suppress
 
     fig, ax = plt.subplots(figsize=(15.5, 11))
     ax.set_xlim(0, 17.4); ax.set_ylim(0, 16.6); ax.axis("off")
@@ -371,12 +384,12 @@ def fig_decision_tree():
     box(7.9, 9.4, 2.9, .62, "Edge type?", BLUE)
     arrow(5.1, 9.4, 6.45, 9.4, "yes", 5.8, 9.72)
     box(15.5, 8.5, 2.3, .62, "ACCEPT", GREEN, 11.5)
-    box(11.9, 7.4, 3.4, .95, "C3  Alerted in the\nclean control?", BLUE, 9.5)
-    box(15.4, 6.1, 2.6, .62, "SUPPRESS", GREEN, 11)
+    box(11.9, 7.4, 3.4, .95, "C3  Alerted in the\nclean control?", BLUE, 9.5, live=saw_empirical)
+    box(15.4, 6.1, 2.6, .62, "SUPPRESS", GREEN, 11, live=saw_emp_suppress)
     arrow(9.35, 9.25, 14.35, 8.62, "deterministic", 11.7, 9.22)
-    arrow(9.35, 9.05, 10.2, 7.7, "empirical", 9.55, 8.28)
-    arrow(13.6, 7.62, 14.35, 8.38, "no", 13.7, 8.16)
-    arrow(13.6, 7.12, 14.1, 6.3, "yes", 13.62, 6.66)
+    arrow(9.35, 9.05, 10.2, 7.7, "empirical", 9.55, 8.28, live=saw_empirical)
+    arrow(13.6, 7.62, 14.35, 8.38, "no", 13.7, 8.16, live=saw_emp_accept)
+    arrow(13.6, 7.12, 14.1, 6.3, "yes", 13.62, 6.66, live=saw_emp_suppress)
 
     # C3 -------------------------------------------------------------------
     box(SX, 6.5, SW, 1.05, "C3  Same feature and metric\nalerted in the clean control?", BLUE, 9.5)
@@ -394,7 +407,7 @@ def fig_decision_tree():
 
     handles = [mpatches.Patch(color=BLUE, label="Decision criterion"),
                mpatches.Patch(color=GREEN, label="Recommended action")]
-    if not (saw_schema and saw_unexpl):
+    if not (saw_schema and saw_unexpl and saw_emp_accept and saw_emp_suppress):
         handles.append(Line2D([0], [0], color="#5A5A5A", linestyle=(0, (3, 2)),
                               linewidth=1.6,
                               label="Path not exercised by the experiments"))
@@ -411,7 +424,9 @@ def fig_decision_tree():
     plt.close(fig)
     print("fig_decision_tree.png")
     print(f"    schema branch exercised: {saw_schema}; "
-          f"unexplained branch exercised: {saw_unexpl}")
+          f"unexplained branch exercised: {saw_unexpl}; "
+          f"empirical edge -> ACCEPT: {saw_emp_accept}; "
+          f"empirical edge -> SUPPRESS: {saw_emp_suppress}")
 
 
 # ---------------------------------------------------------------- figure 5b
@@ -502,7 +517,7 @@ def fig_replay_pipeline():
     # verify_experiment.py gate: routed above the row stack so it never
     # crosses the per-row date/alert text.
     verify_y = replay_top + .95
-    box(vx, verify_y, 5.4, 1.35, "verify_experiment.py\nrun between replays · checks five tables\n"
+    box(vx, verify_y, 5.4, 1.35, "verify_experiment.py\nrun between replays · checks four tables\n"
         "are populated and prints the activation point", "#D98A3D", 8.4)
     ax.text(vx + .35, verify_y - .68, "per-run gate", fontsize=8, style="italic", color="#7a5122", ha="left")
     arrow(3.3, rect_top, vx - 2.55, verify_y + .15, dashed=True, rad=-0.25)
@@ -528,7 +543,8 @@ def fig_replay_pipeline():
     an_y2 = an_y1 - 1.85
     box(2.7, an_y2, 6.6, 1.2,
         "build_result_tables · generate_figures ·\nblind_mode_eval · blind_mode_v2\n"
-        "8 CSV files · 8 PNG files · the RQ4 evaluation", "#D98A3D", 8.3)
+        "result tables → results/ · figures → figures/ · the RQ4 evaluation",
+        "#D98A3D", 8.3)
     arrow(2.7, an_y1 - .775, 2.7, an_y2 + .6)
 
     box(vx, an_y1, 5.4, 2.05,
@@ -646,19 +662,22 @@ def fig_system_architecture():
         HOST_ORANGE, 9.5)
     arrow(8.6, 14.15, 8.6, 13.5)
 
-    box(8.6, 12.75, 12.4, 1.5,
-        "kafka_producer.py  →  Apache Kafka (single partition)\n"
-        "EventSource: publishes every row, in order, to the topic\n"
-        "(run_experiment.py also writes the experiments row to Postgres, once)",
-        ADAPTER_BLUE, 9.3)
-    tag(8.6, 11.73, "ParquetEventSource")
+    # run_experiment.py publishes directly; kafka_producer.py is not used by any
+    # experiment. EventSource is the read side (interfaces.EventSource.windows),
+    # so its boundary sits between the topic and the consumers.
+    box(8.6, 12.95, 12.4, 1.1,
+        "run_experiment.py  →  Apache Kafka (single partition)\n"
+        "publishes every row in event order; writes the experiments row to Postgres once",
+        HOST_ORANGE, 9.3)
+    arrow(8.6, 12.4, 8.6, 12.08)
+    box(8.6, 11.75, 11.0, 0.6,
+        "EventSource: each consumer reads the topic as windows, in its own consumer group",
+        ADAPTER_BLUE, 8.8)
+    tag(15.95, 11.75, "ParquetEventSource")
 
-    ax.text(8.6, 11.45,
-            "Three consumers, own consumer group each, read the topic independently",
-            ha="center", fontsize=8.6, style="italic", color="#555555")
-    arrow(8.6, 11.95, 3.0, 10.75, rad=0.22)
-    arrow(8.6, 11.95, 8.6, 10.75)
-    arrow(8.6, 11.95, 14.7, 10.75, rad=-0.22)
+    arrow(3.6, 11.45, 3.0, 10.75)
+    arrow(8.6, 11.45, 8.6, 10.75)
+    arrow(13.6, 11.45, 14.4, 10.75)
 
     # THREE CONSUMERS ------------------------------------------------------
     box(3.0, 10.2, 5.7, 1.05, "kafka_consumer_validation.py\nValidator: validate(df) per window",
@@ -826,11 +845,14 @@ def fig_unseen_category():
     threshold, while the chi-square statistic reaches the order of 10^11
     because an unseen category drives the expected count to zero and the
     value returned is a function of the regularisation floor.
+
+    Post-activation means use window_end, the same boundary as
+    build_result_tables.py, so the values here agree with recall_by_metric.csv.
     """
     df = q("""
         SELECT LEFT(experiment_id, 2) AS scen, metric_name,
                AVG(metric_value) FILTER (
-                   WHERE window_start >= (SELECT MIN(activation_timestamp)
+                   WHERE window_end >= (SELECT MIN(activation_timestamp)
                                           FROM dq_monitoring.experiments
                                           WHERE activation_timestamp IS NOT NULL)
                ) AS post

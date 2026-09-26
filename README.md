@@ -81,8 +81,9 @@ between scenarios -- classification requires every earlier run to still be prese
 Never launch the same scenario twice concurrently; a prior `tee` collision has
 overwritten a run's log this way.
 
-Run `python scripts/verify_experiment.py` between replays to confirm the five
-monitoring tables were populated and to print the recorded activation point.
+Run `python scripts/verify_experiment.py` between replays to confirm the run's rows
+reached `experiments`, `validation_runs`, `drift_scores` and `schema_snapshots`, and to
+print the recorded activation point.
 
 ## Analysis
 
