@@ -1,0 +1,66 @@
+== raw data size
+661M	data/raw
+== pilot history
+2026-09-09 09:24:56 +0200  8109284  Add build_result_tables.py so every result CSV has a writer; reclassify all runs including S6 (97,643 alerts, zero unattributed); regenerate figures
+2026-09-07 22:01:40 +0200  b7a2cb3  Correct decision tree against the implemented framework; split pilot PSI by feature type; regenerate pilot from a complete run
+2026-09-01 23:02:38 +0200  78b38cd  Window-size pilot: false-alert rate by metric across five window sizes
+== first scenario commits
+2026-09-01 21:39:50 +0200  595ee38  Initial commit: project scaffolding
+2026-09-01 21:48:52 +0200  96ade74  Add Docker Compose stack: PostgreSQL, Zookeeper, Kafka
+2026-09-01 21:54:51 +0200  19e3a4b  Pin Python dependencies (GX 1.1.3, pandas 2.1.4, scipy 1.13.1, MLflow 2.17.2)
+2026-09-01 21:57:18 +0200  a59502c  Add dataset download script (NYC TLC Yellow Taxi 2024, 12 monthly Parquet files)
+2026-09-01 22:01:20 +0200  28d3500  Add Kafka producer with chronological replay (CP1: 6,628 rec/s measured)
+2026-09-01 22:03:57 +0200  b1696a3  Add Great Expectations context and 32-expectation validation suite
+2026-09-01 22:07:27 +0200  5d1a032  Add dq_monitoring schema: experiments, validation, drift, schema, and alert tables
+2026-09-01 22:08:31 +0200  c7907c0  Compute reference and schema baselines from first week of January 2024
+2026-09-01 22:15:05 +0200  f03e113  Add validation consumer with row-level quarantine
+2026-09-01 22:19:17 +0200  f643be7  Add drift consumer: PSI, KS, chi-square with effect-size gates and unseen-category guard
+2026-09-01 22:21:40 +0200  29f3c1b  Update GX context with auto-registered pandas datasource
+2026-09-01 22:26:29 +0200  653c3f5  Add schema-change consumer (new, missing, and retyped columns)
+2026-09-01 22:32:01 +0200  29b3214  Add MLflow and Airflow services with psycopg2 and mounted project directories
+2026-09-01 22:36:35 +0200  e210bbe  Add drift injection module for six scenarios (C0, S1-S5)
+2026-09-01 22:38:48 +0200  8459b9f  Add feature dependency map and deterministic alert classifier
+2026-09-01 22:39:12 +0200  fa40d75  Add 17 unit tests for alert classifier covering labels, precedence, and temporal edges
+2026-09-01 22:50:19 +0200  e47138d  Add experiment runner; use single Kafka partition to preserve event-time order
+2026-09-01 23:02:38 +0200  78b38cd  Window-size pilot: false-alert rate by metric across five window sizes
+2026-09-01 23:08:43 +0200  bae2176  Add per-experiment verification check
+2026-09-02 21:39:16 +0200  0e76b46  Stream corpus month by month instead of loading the full year
+2026-09-03 20:23:10 +0200  98ce793  C0 clean control: 41.2M rows, 4117 windows, 11022 false alerts (12.2%)
+2026-09-03 20:29:57 +0200  2e40b73  C0 clean control: 41.2M rows, 4117 windows, 11022 false alerts (12.2%)
+2026-09-03 23:40:15 +0200  9411980  Propagate mean shift into total_amount to preserve the fare arithmetic identity
+2026-09-05 08:15:50 +0200  f857f62  S1 numerical mean shift: KS detects fare_amount and propagated total_amount; PSI detects neither; latency one window (2h54m)
+2026-09-05 11:22:58 +0200  fa04d8a  S2 categorical value swap: PSI delta 1758 vs chi2 818 on payment_type; no marginal shift in tip_amount
+2026-09-05 14:26:33 +0200  ebf3212  S3 unseen category: PSI delta 2059 with interpretable magnitude 1.04; chi2 delta 1746 but magnitude diverges to 78000
+2026-09-05 17:31:44 +0200  444d422  S4 variance shift: KS delta 1805 on trip_distance; PSI moves 0.000035 to 0.000068, never fires; validation catches 131210 out-of-range rows
+2026-09-05 21:01:46 +0200  040dc53  S5 mixed scenario: deltas exactly additive with S1 and S2; all six experiments complete
+2026-09-05 21:05:10 +0200  b8201c2  Fix classifier: pre-activation alerts on injected features fall through to baseline check
+2026-09-05 21:07:23 +0200  6ff9c48  Per-metric recall: PSI 0/3 on numerical targets, 3/3 on categorical; KS 3/3, chi2 3/3
+2026-09-05 21:12:18 +0200  ccb2e45  Add Alert Interpretation Framework (D2 checklist, D3 implementation with 12 tests, D4 applied to 82816 alerts)
+2026-09-06 21:20:24 +0200  8722371  Track figures and figure generator; exclude exploratory dashboard
+2026-09-06 21:29:04 +0200  8998c6e  Add drift metric correctness tests and blind-mode RQ4 evaluation
+2026-09-06 21:56:25 +0200  7d24900  Rename S3: RatecodeID 99 is present in the baseline at 0.88%, so the scenario is a rare-category frequency shift rather than an unseen category
+2026-09-06 22:14:40 +0200  0868c67  Step 19: stack health and drift summary DAGs; mount results for persistent DAG output
+2026-09-06 22:32:00 +0200  41a4e74  Step 20: five adapter protocols with fallback implementations and equivalence tests
+2026-09-06 22:33:02 +0200  b383a97  Compare event-time instants rather than string representations in the Kafka/Parquet equivalence test
+2026-09-07 22:01:40 +0200  b7a2cb3  Correct decision tree against the implemented framework; split pilot PSI by feature type; regenerate pilot from a complete run
+2026-09-07 22:23:09 +0200  9679421  Correct threshold provenance: 0.2 is a midpoint of Siddiqi's 0.10/0.25 (p.137), not his convention; document that the categorical gate is not Cramer's V; add S6 unseen-category scenario with a baseline guard
+2026-09-09 07:01:02 +0200  e06a159  Add three Chapter 5 figures: PSI binning mechanism, unseen-category comparison, and metric timeline
+       experiment_id       | windows_outside_2024 
+---------------------------+----------------------
+ C0_20260902T193926_7f1e3f |                   13
+ S1_20260904T183253_c55624 |                   13
+ S2_20260905T061550_7ca686 |                   13
+ S3_20260905T092259_de6186 |                   13
+ S4_20260905T122634_0e865c |                   13
+ S5_20260905T153144_6ed0d7 |                   13
+ S6_20260908T193520_1db87d |                   13
+ S7_20260919T055534_20611a |                   13
+(8 rows)
+
+ run | pre_windows | pre_mean_chi2 
+-----+-------------+---------------
+ C0  |        2064 |        242.73
+ S3  |        2064 |        439.47
+ S6  |        2064 | 1028626994.48
+(3 rows)
+

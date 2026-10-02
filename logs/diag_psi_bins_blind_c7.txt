@@ -1,0 +1,87 @@
+
+=== Part B: 108,665 alerts, 2,059 windows with a schema change ===
+
+  B1 original C3 + C7
+  scen                 alerts            oracle_ACT   detections_surfaced        blind_SUPPRESS     blind_INVESTIGATE             blind_ACT         blind_MONITOR          blind_ACCEPT
+  C0                   11,022                     0                     0                11,022                     0                     0                     0                     0
+  S1                   13,983                 2,053                     0                13,983                     0                     0                     0                     0
+  S2                   13,598                 4,106                     0                13,598                     0                     0                     0                     0
+  S3                   14,827                 4,106                     0                14,827                     0                     0                     0                     0
+  S4                   12,827                 1,011                     0                12,827                     0                     0                     0                     0
+  S5                   16,559                 6,159                     0                16,559                     0                     0                     0                     0
+  S6                   14,827                 4,106                     0                14,827                     0                     0                     0                     0
+  S7                   11,022                     0                     0                 4,996                 6,026                     0                     0                     0
+
+  B2 magnitude-aware C3 + C7 (C0 excluded, as in blind_mode_v2.py)
+  p95.0  recall 100.00%  shown  48,789  oracle shown  32,715  noise leaked  16,074  of 97,643 alerts
+  p99.0  recall 100.00%  shown  35,969  oracle shown  32,715  noise leaked   3,675  of 97,643 alerts
+  p99.9  recall  96.02%  shown  31,341  oracle shown  32,715  noise leaked     525  of 97,643 alerts
+  p100.0 recall  91.99%  shown  30,015  oracle shown  32,715  noise leaked      68  of 97,643 alerts
+
+wrote results/diag_blind_c7.csv and results/diag_blind_v2_c7.csv
+
+=== Part A: reference bins ===
+  trip_distance    empty reference bins: [2, 3, 5, 6, 7, 8]
+  fare_amount      empty reference bins: [7, 8]
+  total_amount     empty reference bins: [8]
+  passenger_count  empty reference bins: [4]
+  tip_amount       empty reference bins: [7, 8]
+
+--- C0  stored experiment: C0_20260902T193926_7f1e3f ---
+    C0 yellow_tripdata_2024-01.parquet done (1s)
+    C0 yellow_tripdata_2024-02.parquet done (1s)
+    C0 yellow_tripdata_2024-03.parquet done (1s)
+    C0 yellow_tripdata_2024-04.parquet done (1s)
+    C0 yellow_tripdata_2024-05.parquet done (1s)
+    C0 yellow_tripdata_2024-06.parquet done (1s)
+    C0 yellow_tripdata_2024-07.parquet done (1s)
+    C0 yellow_tripdata_2024-08.parquet done (1s)
+    C0 yellow_tripdata_2024-09.parquet done (1s)
+    C0 yellow_tripdata_2024-10.parquet done (1s)
+    C0 yellow_tripdata_2024-11.parquet done (1s)
+    C0 yellow_tripdata_2024-12.parquet done (1s)
+  feature=trip_distance, empty_ref_bins=6, windows=4117, windows_mass_in_empty_ref_bin=269, values_in_empty_ref_bins=295, windows_empty_window_bin=4117, windows_strict_psi_undefined=4117, max_psi=0.001511, max_floored_contribution=0.001511, values_below_range=0, values_above_range=487, windows_out_of_range=428, windows_compared_to_db=4117, max_abs_diff_vs_db=0
+  feature=fare_amount, empty_ref_bins=2, windows=4117, windows_mass_in_empty_ref_bin=34, values_in_empty_ref_bins=40, windows_empty_window_bin=4117, windows_strict_psi_undefined=4117, max_psi=0.059017, max_floored_contribution=0.002183, values_below_range=78, values_above_range=22, windows_out_of_range=87, windows_compared_to_db=4117, max_abs_diff_vs_db=0
+  feature=total_amount, empty_ref_bins=1, windows=4117, windows_mass_in_empty_ref_bin=6, values_in_empty_ref_bins=6, windows_empty_window_bin=4117, windows_strict_psi_undefined=4117, max_psi=0.048906, max_floored_contribution=0.003177, values_below_range=82, values_above_range=24, windows_out_of_range=94, windows_compared_to_db=4117, max_abs_diff_vs_db=0
+  feature=passenger_count, empty_ref_bins=1, windows=4117, windows_mass_in_empty_ref_bin=0, values_in_empty_ref_bins=0, windows_empty_window_bin=4111, windows_strict_psi_undefined=4111, max_psi=0.192605, max_floored_contribution=0.000107, values_below_range=0, values_above_range=36, windows_out_of_range=36, windows_compared_to_db=4117, max_abs_diff_vs_db=0
+  feature=tip_amount, empty_ref_bins=2, windows=4117, windows_mass_in_empty_ref_bin=82, values_in_empty_ref_bins=83, windows_empty_window_bin=4117, windows_strict_psi_undefined=4117, max_psi=0.008742, max_floored_contribution=0.008434, values_below_range=26, values_above_range=50, windows_out_of_range=73, windows_compared_to_db=4117, max_abs_diff_vs_db=0
+
+--- S1  stored experiment: S1_20260904T183253_c55624 ---
+    S1 yellow_tripdata_2024-01.parquet done (1s)
+    S1 yellow_tripdata_2024-02.parquet done (1s)
+    S1 yellow_tripdata_2024-03.parquet done (1s)
+    S1 yellow_tripdata_2024-04.parquet done (1s)
+    S1 yellow_tripdata_2024-05.parquet done (1s)
+    S1 yellow_tripdata_2024-06.parquet done (1s)
+    S1 yellow_tripdata_2024-07.parquet done (1s)
+    S1 yellow_tripdata_2024-08.parquet done (1s)
+    S1 yellow_tripdata_2024-09.parquet done (1s)
+    S1 yellow_tripdata_2024-10.parquet done (1s)
+    S1 yellow_tripdata_2024-11.parquet done (1s)
+    S1 yellow_tripdata_2024-12.parquet done (1s)
+  feature=trip_distance, empty_ref_bins=6, windows=4117, windows_mass_in_empty_ref_bin=269, values_in_empty_ref_bins=295, windows_empty_window_bin=4117, windows_strict_psi_undefined=4117, max_psi=0.001511, max_floored_contribution=0.001511, values_below_range=0, values_above_range=487, windows_out_of_range=428, windows_compared_to_db=4117, max_abs_diff_vs_db=0
+  feature=fare_amount, empty_ref_bins=2, windows=4117, windows_mass_in_empty_ref_bin=38, values_in_empty_ref_bins=44, windows_empty_window_bin=4117, windows_strict_psi_undefined=4117, max_psi=0.025703, max_floored_contribution=0.002183, values_below_range=77, values_above_range=23, windows_out_of_range=87, windows_compared_to_db=4117, max_abs_diff_vs_db=0
+  feature=total_amount, empty_ref_bins=1, windows=4117, windows_mass_in_empty_ref_bin=6, values_in_empty_ref_bins=6, windows_empty_window_bin=4117, windows_strict_psi_undefined=4117, max_psi=0.023307, max_floored_contribution=0.003177, values_below_range=74, values_above_range=24, windows_out_of_range=86, windows_compared_to_db=4117, max_abs_diff_vs_db=0
+  feature=passenger_count, empty_ref_bins=1, windows=4117, windows_mass_in_empty_ref_bin=0, values_in_empty_ref_bins=0, windows_empty_window_bin=4111, windows_strict_psi_undefined=4111, max_psi=0.192605, max_floored_contribution=0.000107, values_below_range=0, values_above_range=36, windows_out_of_range=36, windows_compared_to_db=4117, max_abs_diff_vs_db=0
+  feature=tip_amount, empty_ref_bins=2, windows=4117, windows_mass_in_empty_ref_bin=82, values_in_empty_ref_bins=83, windows_empty_window_bin=4117, windows_strict_psi_undefined=4117, max_psi=0.008742, max_floored_contribution=0.008434, values_below_range=26, values_above_range=50, windows_out_of_range=73, windows_compared_to_db=4117, max_abs_diff_vs_db=0
+
+--- S4  stored experiment: S4_20260905T122634_0e865c ---
+    S4 yellow_tripdata_2024-01.parquet done (1s)
+    S4 yellow_tripdata_2024-02.parquet done (1s)
+    S4 yellow_tripdata_2024-03.parquet done (1s)
+    S4 yellow_tripdata_2024-04.parquet done (1s)
+    S4 yellow_tripdata_2024-05.parquet done (1s)
+    S4 yellow_tripdata_2024-06.parquet done (1s)
+    S4 yellow_tripdata_2024-07.parquet done (1s)
+    S4 yellow_tripdata_2024-08.parquet done (1s)
+    S4 yellow_tripdata_2024-09.parquet done (1s)
+    S4 yellow_tripdata_2024-10.parquet done (1s)
+    S4 yellow_tripdata_2024-11.parquet done (1s)
+    S4 yellow_tripdata_2024-12.parquet done (1s)
+  feature=trip_distance, empty_ref_bins=6, windows=4117, windows_mass_in_empty_ref_bin=255, values_in_empty_ref_bins=289, windows_empty_window_bin=4117, windows_strict_psi_undefined=4117, max_psi=0.00219, max_floored_contribution=0.001706, values_below_range=0, values_above_range=712, windows_out_of_range=599, windows_compared_to_db=4117, max_abs_diff_vs_db=0
+  feature=fare_amount, empty_ref_bins=2, windows=4117, windows_mass_in_empty_ref_bin=34, values_in_empty_ref_bins=40, windows_empty_window_bin=4117, windows_strict_psi_undefined=4117, max_psi=0.059017, max_floored_contribution=0.002183, values_below_range=78, values_above_range=22, windows_out_of_range=87, windows_compared_to_db=4117, max_abs_diff_vs_db=0
+  feature=total_amount, empty_ref_bins=1, windows=4117, windows_mass_in_empty_ref_bin=6, values_in_empty_ref_bins=6, windows_empty_window_bin=4117, windows_strict_psi_undefined=4117, max_psi=0.048906, max_floored_contribution=0.003177, values_below_range=82, values_above_range=24, windows_out_of_range=94, windows_compared_to_db=4117, max_abs_diff_vs_db=0
+  feature=passenger_count, empty_ref_bins=1, windows=4117, windows_mass_in_empty_ref_bin=0, values_in_empty_ref_bins=0, windows_empty_window_bin=4111, windows_strict_psi_undefined=4111, max_psi=0.192605, max_floored_contribution=0.000107, values_below_range=0, values_above_range=36, windows_out_of_range=36, windows_compared_to_db=4117, max_abs_diff_vs_db=0
+  feature=tip_amount, empty_ref_bins=2, windows=4117, windows_mass_in_empty_ref_bin=82, values_in_empty_ref_bins=83, windows_empty_window_bin=4117, windows_strict_psi_undefined=4117, max_psi=0.008742, max_floored_contribution=0.008434, values_below_range=26, values_above_range=50, windows_out_of_range=73, windows_compared_to_db=4117, max_abs_diff_vs_db=0
+
+wrote results/diag_psi_bins.csv

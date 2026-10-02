@@ -1,0 +1,14 @@
+run,feature,metric,post_windows,post_alerts,post_alerts_persisted,latency_raw,latency_persisted
+S1,fare_amount,ks,2060,2060,2057,0 days 02:54:10,0 days 14:38:03
+S1,total_amount,ks,2060,2060,2057,0 days 02:54:10,0 days 14:38:03
+S2,payment_type,chi2,2060,2060,2058,0 days 02:54:10,0 days 14:38:03
+S2,payment_type,psi,2060,2060,2057,0 days 02:54:10,0 days 14:38:03
+S3,RatecodeID,chi2,2060,2060,2057,0 days 02:54:10,0 days 14:38:03
+S3,RatecodeID,psi,2060,2059,2057,0 days 02:54:10,0 days 14:38:03
+S4,trip_distance,ks,2060,2060,2057,0 days 02:54:10,0 days 14:38:03
+S5,fare_amount,ks,2060,2060,2057,0 days 02:54:10,0 days 14:38:03
+S5,total_amount,ks,2060,2060,2057,0 days 02:54:10,0 days 14:38:03
+S5,payment_type,chi2,2060,2060,2058,0 days 02:54:10,0 days 14:38:03
+S5,payment_type,psi,2060,2060,2057,0 days 02:54:10,0 days 14:38:03
+S6,RatecodeID,chi2,2060,2060,2057,0 days 02:54:10,0 days 14:38:03
+S6,RatecodeID,psi,2060,2059,2057,0 days 02:54:10,0 days 14:38:03

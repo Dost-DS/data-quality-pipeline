@@ -1,0 +1,48 @@
+/home/dost/thesis/data-quality-pipeline/scripts/diag_unsourced.py:39: UserWarning: pandas only supports SQLAlchemy connectable (engine/connection) or database string URI or sqlite3 DBAPI2 connection. Other DBAPI2 objects are not tested. Please consider using SQLAlchemy.
+  df = pd.read_sql("""SELECT id, experiment_id, window_id, window_start, window_end,
+loaded 724,592 drift scores from 8 runs
+
+=== 1. Persistence (3 consecutive windows) ===
+  C0 alerts: 11,022 -> 4,094 of 90,574 scores (12.17% -> 4.52%)
+  run=S1, feature=fare_amount, metric=ks, post_windows=2060, post_alerts=2060, post_alerts_persisted=2057, latency_raw=0 days 02:54:10, latency_persisted=0 days 14:38:03
+  run=S1, feature=total_amount, metric=ks, post_windows=2060, post_alerts=2060, post_alerts_persisted=2057, latency_raw=0 days 02:54:10, latency_persisted=0 days 14:38:03
+  run=S2, feature=payment_type, metric=chi2, post_windows=2060, post_alerts=2060, post_alerts_persisted=2058, latency_raw=0 days 02:54:10, latency_persisted=0 days 14:38:03
+  run=S2, feature=payment_type, metric=psi, post_windows=2060, post_alerts=2060, post_alerts_persisted=2057, latency_raw=0 days 02:54:10, latency_persisted=0 days 14:38:03
+  run=S3, feature=RatecodeID, metric=chi2, post_windows=2060, post_alerts=2060, post_alerts_persisted=2057, latency_raw=0 days 02:54:10, latency_persisted=0 days 14:38:03
+  run=S3, feature=RatecodeID, metric=psi, post_windows=2060, post_alerts=2059, post_alerts_persisted=2057, latency_raw=0 days 02:54:10, latency_persisted=0 days 14:38:03
+  run=S4, feature=trip_distance, metric=ks, post_windows=2060, post_alerts=2060, post_alerts_persisted=2057, latency_raw=0 days 02:54:10, latency_persisted=0 days 14:38:03
+  run=S5, feature=fare_amount, metric=ks, post_windows=2060, post_alerts=2060, post_alerts_persisted=2057, latency_raw=0 days 02:54:10, latency_persisted=0 days 14:38:03
+  run=S5, feature=total_amount, metric=ks, post_windows=2060, post_alerts=2060, post_alerts_persisted=2057, latency_raw=0 days 02:54:10, latency_persisted=0 days 14:38:03
+  run=S5, feature=payment_type, metric=chi2, post_windows=2060, post_alerts=2060, post_alerts_persisted=2058, latency_raw=0 days 02:54:10, latency_persisted=0 days 14:38:03
+  run=S5, feature=payment_type, metric=psi, post_windows=2060, post_alerts=2060, post_alerts_persisted=2057, latency_raw=0 days 02:54:10, latency_persisted=0 days 14:38:03
+  run=S6, feature=RatecodeID, metric=chi2, post_windows=2060, post_alerts=2060, post_alerts_persisted=2057, latency_raw=0 days 02:54:10, latency_persisted=0 days 14:38:03
+  run=S6, feature=RatecodeID, metric=psi, post_windows=2060, post_alerts=2059, post_alerts_persisted=2057, latency_raw=0 days 02:54:10, latency_persisted=0 days 14:38:03
+
+=== 2. Per-feature calibration at p99 of the control ===
+  C0 alerts: 11,022 -> 923 of 90,574 scores (1.02%)
+  run=S1, feature=fare_amount, metric=ks, post_windows=2060, post_alerts_fixed=2060, post_alerts_calibrated=2060, calibrated_pct=100.0, cut=0.152652
+  run=S1, feature=total_amount, metric=ks, post_windows=2060, post_alerts_fixed=2060, post_alerts_calibrated=2059, calibrated_pct=100.0, cut=0.199052
+  run=S1, feature=fare_amount, metric=psi, post_windows=2060, post_alerts_fixed=0, post_alerts_calibrated=77, calibrated_pct=3.7, cut=0.012681
+  run=S1, feature=total_amount, metric=psi, post_windows=2060, post_alerts_fixed=0, post_alerts_calibrated=48, calibrated_pct=2.3, cut=0.011928
+  run=S2, feature=payment_type, metric=chi2, post_windows=2060, post_alerts_fixed=2060, post_alerts_calibrated=2058, calibrated_pct=99.9, cut=13657.732744
+  run=S2, feature=payment_type, metric=psi, post_windows=2060, post_alerts_fixed=2060, post_alerts_calibrated=2058, calibrated_pct=99.9, cut=0.558559
+  run=S3, feature=RatecodeID, metric=chi2, post_windows=2060, post_alerts_fixed=2060, post_alerts_calibrated=2059, calibrated_pct=100.0, cut=1639.128292
+  run=S3, feature=RatecodeID, metric=psi, post_windows=2060, post_alerts_fixed=2059, post_alerts_calibrated=2059, calibrated_pct=100.0, cut=0.117473
+  run=S4, feature=trip_distance, metric=ks, post_windows=2060, post_alerts_fixed=2060, post_alerts_calibrated=1638, calibrated_pct=79.5, cut=0.167388
+  run=S4, feature=trip_distance, metric=psi, post_windows=2060, post_alerts_fixed=0, post_alerts_calibrated=51, calibrated_pct=2.5, cut=0.000753
+  run=S5, feature=fare_amount, metric=ks, post_windows=2060, post_alerts_fixed=2060, post_alerts_calibrated=2060, calibrated_pct=100.0, cut=0.152652
+  run=S5, feature=total_amount, metric=ks, post_windows=2060, post_alerts_fixed=2060, post_alerts_calibrated=2059, calibrated_pct=100.0, cut=0.199052
+  run=S5, feature=fare_amount, metric=psi, post_windows=2060, post_alerts_fixed=0, post_alerts_calibrated=23, calibrated_pct=1.1, cut=0.012681
+  run=S5, feature=total_amount, metric=psi, post_windows=2060, post_alerts_fixed=0, post_alerts_calibrated=8, calibrated_pct=0.4, cut=0.011928
+  run=S5, feature=payment_type, metric=chi2, post_windows=2060, post_alerts_fixed=2060, post_alerts_calibrated=2058, calibrated_pct=99.9, cut=13657.732744
+  run=S5, feature=payment_type, metric=psi, post_windows=2060, post_alerts_fixed=2060, post_alerts_calibrated=2058, calibrated_pct=99.9, cut=0.558559
+  run=S6, feature=RatecodeID, metric=chi2, post_windows=2060, post_alerts_fixed=2060, post_alerts_calibrated=2059, calibrated_pct=100.0, cut=1639.128292
+  run=S6, feature=RatecodeID, metric=psi, post_windows=2060, post_alerts_fixed=2059, post_alerts_calibrated=2059, calibrated_pct=100.0, cut=0.117473
+
+=== 3. RatecodeID pre-activation means (window start before activation) ===
+  psi  C0: windows=2,064 mean=0.0270983 change vs C0=+0.0%
+  psi  S3: windows=2,064 mean=0.0297637 change vs C0=+9.8%
+  psi  S6: windows=2,064 mean=0.0365856 change vs C0=+35.0%
+  chi2 C0: windows=2,064 mean=242.731 change vs C0=+0.0%
+  chi2 S3: windows=2,064 mean=439.471 change vs C0=+81.1%
+  chi2 S6: windows=2,064 mean=1.02863e+09 change vs C0=+423772246.7%
