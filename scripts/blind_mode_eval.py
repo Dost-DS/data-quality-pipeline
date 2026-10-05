@@ -33,6 +33,13 @@ def main():
         control = control_alert_set(cur.fetchall())
     print(f"control alert pairs available to the blind operator: {len(control)}")
 
+    # Windows in which a schema change was recorded, so criterion C7 can fire.
+    with conn.cursor() as cur:
+        cur.execute("""SELECT experiment_id, window_start
+                       FROM dq_monitoring.schema_snapshots WHERE has_schema_change""")
+        schema_windows = {(r[0], r[1]) for r in cur.fetchall()}
+    print(f"windows with a schema change: {len(schema_windows)}")
+
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute("""SELECT ac.id, ac.experiment_id, ac.label AS oracle_label,
                               ac.recommended_action AS oracle_action,
@@ -56,7 +63,8 @@ def main():
             prop_targets={},
             control_alerts=control)
         blind_action, _ = recommend(blind_label, a["metric_name"],
-                                    a["metric_value"], schema_changed=False)
+                                    a["metric_value"],
+                                    schema_changed=(a["experiment_id"], a["window_start"]) in schema_windows)
         crosstab[(a["oracle_action"], blind_action)] += 1
         scen = a["experiment_id"][:2]
         per_scen.setdefault(scen, Counter())[(a["oracle_action"], blind_action)] += 1
