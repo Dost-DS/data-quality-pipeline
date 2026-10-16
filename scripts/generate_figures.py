@@ -18,6 +18,16 @@ verified against its implementation:
                      dependency edge entirely and routed chi-square through a
                      magnitude test the implementation skips.
 
+  All ten figures  Redrawn for print (October 2026): no title or note
+                     inside the image, since the thesis caption carries both;
+                     sized for a 16 cm text width; colours unchanged. The
+                     decision tree now shows that an unexplained chi-square
+                     alert skips C4; the PSI figure states that its values
+                     come from the pilot slice; the magnitude ratios use the
+                     window_end boundary, so they match the Chapter 5 tables;
+                     fig_replay_pipeline draws the runs at their recorded
+                     start times instead of a hand-written sequence.
+
   fig_replay_pipeline  Added when S7 was run. Previously hand-drawn and kept
                      outside this script, so the S7 row and the run/alert
                      counts had to be edited by hand and were not; this
@@ -29,6 +39,8 @@ import os
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.dates
+import matplotlib.ticker
 import matplotlib.patches as mpatches
 from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
 from matplotlib.lines import Line2D
@@ -82,87 +94,64 @@ def fig_window_pilot():
         JOIN dq_monitoring.experiments e USING (experiment_id)
         WHERE e.scenario = 'PILOT'
         GROUP BY 1, 2, 3""")
-
-    split = not df.empty
-    if not split:
-        print("  ! no PILOT rows in drift_scores - falling back to the CSV, which")
-        print("    cannot separate numerical from categorical PSI. Re-run")
-        print("    scripts/pilot_window_size.py to recover the breakdown.")
-        df = pd.read_csv("results/pilot_window_size.csv").rename(
-            columns={"false_alerts": "alerts"})
-        df["feature_type"] = "all"
-
+    if df.empty:
+        print("  ! no PILOT rows in drift_scores; skipping fig_window_pilot")
+        return
     df["pct"] = 100.0 * df.alerts / df.scores
 
     # KS is computed on numerical features only and chi-square on categorical
     # only, so neither needs splitting. Only PSI is applied to both.
-    if split:
-        series = [("psi",  "numerical",   "PSI (numerical)",   BLUE,   "o", "--", "white"),
-                  ("psi",  "categorical", "PSI (categorical)", BLUE,   "o", "-",  BLUE),
-                  ("ks",   "numerical",   "KS (numerical)",    ORANGE, "s", "-",  ORANGE),
-                  ("chi2", "categorical", "Chi\u00b2 (categorical)", GREEN, "^", "-", GREEN)]
-    else:
-        series = [("psi",  "all", "PSI (both feature types)", BLUE,   "o", "-", BLUE),
-                  ("ks",   "all", "KS (numerical)",           ORANGE, "s", "-", ORANGE),
-                  ("chi2", "all", "Chi\u00b2 (categorical)", GREEN,  "^", "-", GREEN)]
+    series = [("psi",  "numerical",   "PSI, numerical",   BLUE,   "o", "--", "white"),
+              ("psi",  "categorical", "PSI, categorical", BLUE,   "o", "-",  BLUE),
+              ("ks",   "numerical",   "KS, numerical",    ORANGE, "s", "-",  ORANGE),
+              ("chi2", "categorical", "Chi-square, categorical", GREEN, "^", "-", GREEN)]
 
-    fig, ax = plt.subplots(figsize=(7.6, 4.9))
-    plotted = {}
+    fig, ax = plt.subplots(figsize=(TEXT_W, 3.0))
     for metric, ftype, label, colour, marker, style, mfc in series:
-        d = df[(df.metric_name == metric) & (df.feature_type == ftype)]
+        d = df[(df.metric_name == metric) & (df.feature_type == ftype)].sort_values("window_size")
         if d.empty:
             continue
-        d = d.sort_values("window_size")
         ax.plot(d.window_size, d.pct, marker=marker, color=colour, label=label,
-                linewidth=2, markersize=7, linestyle=style,
-                markerfacecolor=mfc, markeredgewidth=1.6, zorder=3)
-        plotted[label] = [round(x, 2) for x in d.pct]
+                linewidth=1.3, markersize=4.5, linestyle=style,
+                markerfacecolor=mfc, markeredgewidth=1.0, zorder=3)
+        print(f"    {label:<26}" + "  ".join(f"{x:6.2f}" for x in d.pct)
+              + "   (alerts/scores: " + ", ".join(f"{a}/{s}" for a, s in zip(d.alerts, d.scores)) + ")")
 
     ax.set_xscale("log")
-    ax.set_xticks(sorted(df.window_size.unique()))
-    ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
+    ws = sorted(df.window_size.unique())
+    ax.set_xticks(ws)
+    ax.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:,.0f}"))
+    ax.xaxis.set_minor_locator(matplotlib.ticker.NullLocator())
+    ax.set_xlim(ws[0] / 1.15, ws[-1] * 1.15)
+    ax.set_ylim(-1.2, 36)
+    ax.axvline(10000, color=GREY, linestyle="--", linewidth=0.8, zorder=1)
+    ax.text(10000 * 1.04, 35, "adopted", fontsize=7, color=MUTED, va="top")
     ax.set_xlabel("Window size (records)")
     ax.set_ylabel("Baseline alert rate (%)")
-    ax.set_title("Baseline alert rate by window size on unmodified data")
-    ax.set_ylim(bottom=-1.2)
-    ax.axvline(10000, color=GREY, linestyle="--", linewidth=1, zorder=1)
-    ax.text(10400, ax.get_ylim()[1] * 0.94, "adopted", fontsize=9, color=GREY)
-    ax.legend(frameon=False, fontsize=9, loc="center left")
-
-    note = None
-    npsi = plotted.get("PSI (numerical)")
-    if npsi is not None and max(npsi) == 0:
-        note = "Numerical PSI raised no alert at any window size."
-    elif not split:
-        note = "PSI is aggregated over both feature types; see console warning."
-    if note:
-        ax.text(0.985, 0.05, note, transform=ax.transAxes, ha="right",
-                va="bottom", fontsize=8.5, style="italic", color="#555555")
-
-    fig.savefig(f"{OUT}/fig_window_pilot.png")
-    plt.close(fig)
-    print("fig_window_pilot.png" + ("" if split else "   [AGGREGATED - see warning]"))
-    for k, v in plotted.items():
-        print(f"    {k:<26}" + "  ".join(f"{x:6.2f}" for x in v))
+    _print_axes(ax)
+    ax.legend(frameon=False, fontsize=7, loc="upper right", bbox_to_anchor=(1.0, 0.86),
+              handlelength=2.2)
+    _save_print(fig, "fig_window_pilot")
 
 
 # ---------------------------------------------------------------- figure 2
 def fig_recall():
-    """Detection outcome per injected target and metric. Unchanged."""
+    """Detection outcome per injected target and metric."""
     df = pd.read_csv("results/recall_by_metric.csv")
     df["detected"] = df.post_alerts > 0
     df["row"] = df.scenario + "  " + df.injected_feature
     pivot = df.pivot_table(index="row", columns="metric_name",
                            values="detected", aggfunc="first")
     pivot = pivot[[c for c in ["psi", "ks", "chi2"] if c in pivot.columns]]
+    names = {"psi": "PSI", "ks": "KS", "chi2": "Chi-square"}
 
     n_r, n_c = pivot.shape
-    fig, ax = plt.subplots(figsize=(6.5, 0.55 * n_r + 1.8))
+    fig, ax = plt.subplots(figsize=(TEXT_W * 0.72, 0.3 * n_r + 0.5))
     for i in range(n_r):
         for j in range(n_c):
             v = pivot.iloc[i, j]
             if pd.isna(v):
-                face, txt, tc = "#ECECEC", "n/a", "#999999"
+                face, txt, tc = "#ECECEC", "not applied", "#8A8A8A"
             elif v:
                 face, txt, tc = GREEN, "detected", "white"
             else:
@@ -170,84 +159,74 @@ def fig_recall():
             ax.add_patch(plt.Rectangle((j, n_r - i - 1), 1, 1,
                                        facecolor=face, edgecolor="white", linewidth=2))
             ax.text(j + .5, n_r - i - .5, txt, ha="center", va="center",
-                    fontsize=9, color=tc, fontweight="bold")
+                    fontsize=7, color=tc, fontweight="bold")
     ax.set_xlim(0, n_c); ax.set_ylim(0, n_r)
     ax.set_xticks([j + .5 for j in range(n_c)])
-    ax.set_xticklabels([c.upper() for c in pivot.columns], fontweight="bold")
+    ax.set_xticklabels([names[c] for c in pivot.columns], fontsize=7.5)
+    ax.xaxis.tick_top()
     ax.set_yticks([n_r - i - .5 for i in range(n_r)])
-    ax.set_yticklabels(pivot.index, fontsize=9)
-    ax.set_title("Detection outcome by injected target and metric", pad=14)
+    ax.set_yticklabels(pivot.index, fontsize=7.5)
     ax.grid(False); ax.set_frame_on(False); ax.tick_params(length=0)
-    fig.savefig(f"{OUT}/fig_recall.png")
-    plt.close(fig)
-    print("fig_recall.png")
+    _save_print(fig, "fig_recall")
 
 
 # ---------------------------------------------------------------- figure 3
 def fig_magnitude_ratio():
     """Post-activation magnitude against the control's pre-activation mean.
 
-    The denominator is taken from the clean control replay rather than from
-    the scenario's own pre-activation windows. Those two differ slightly,
-    because a small number of windows carry corrupted pickup timestamps that
-    place window_start outside 2024 and are therefore counted as
-    pre-activation while containing post-activation records. The control is
-    the cleaner reference, and using it is stated on the axis.
+    A window counts as pre-activation when it ends before the activation
+    point, the convention used throughout the thesis, so the ratios agree with
+    the tables in Chapter 5. S5 repeats the S1 and S2 changes and S6 has its
+    own figure, because its chi-square value follows from the floor on a zero
+    expected count rather than from the data.
     """
     act = q("""SELECT MIN(activation_timestamp) AS ts
                FROM dq_monitoring.experiments
                WHERE activation_timestamp IS NOT NULL""").ts.iloc[0]
-
     ctrl = q(f"""
         SELECT d.feature_name, d.metric_name,
                AVG(d.metric_value) AS control_pre_mean
         FROM dq_monitoring.drift_scores d
         JOIN dq_monitoring.experiments e USING (experiment_id)
         WHERE e.scenario = 'C0'
-          AND d.window_start < TIMESTAMPTZ '{act}'
+          AND d.window_end < TIMESTAMPTZ '{act}'
           AND d.metric_value IS NOT NULL
         GROUP BY 1, 2""")
 
     df = pd.read_csv("results/recall_by_metric.csv")
-    # S5 is additive with S1 and S2 and would duplicate their bars. S6 is
-    # excluded because its chi-square ratio exceeds 10^9: the statistic is
-    # undefined under an unseen category and the value returned depends on
-    # the regularisation floor, so plotting it on a shared axis would invite
-    # a comparison the caption exists to forbid. S6 has its own figure.
     df = df[~df.scenario.isin(["S5", "S6"])].copy()
     df = df.merge(ctrl, left_on=["injected_feature", "metric_name"],
                   right_on=["feature_name", "metric_name"], how="left")
-
     disagree = (df.control_pre_mean - df.mean_pre).abs() / df.mean_pre.abs()
-    if (disagree > 0.01).any():
+    if (disagree > 0.001).any():
         print("    note: stored mean_pre differs from the control pre-activation mean")
-        for _, r in df[disagree > 0.01].iterrows():
+        for _, r in df[disagree > 0.001].iterrows():
             print(f"      {r.scenario} {r.injected_feature}/{r.metric_name}: "
                   f"stored {r.mean_pre:,.4f}  control {r.control_pre_mean:,.4f}")
 
+    names = {"psi": "PSI", "ks": "KS", "chi2": "chi-square"}
     df["ratio"] = df.mean_post / df.control_pre_mean
-    df["label"] = df.scenario + " " + df.injected_feature + "\n" + df.metric_name.str.upper()
+    df["label"] = df.scenario + " " + df.injected_feature + ", " + df.metric_name.map(names)
     df = df.sort_values("ratio")
 
     colours = [GREEN if d else RED for d in (df.post_alerts > 0)]
-    fig, ax = plt.subplots(figsize=(7.8, 5.2))
-    ax.barh(df.label, df.ratio, color=colours, edgecolor="white")
+    fig, ax = plt.subplots(figsize=(TEXT_W, 2.9))
+    ax.barh(df.label, df.ratio, color=colours, edgecolor="white", height=0.7)
     ax.set_xscale("log")
-    ax.axvline(1, color=GREY, linewidth=1)
-    ax.set_xlabel("Post-activation mean \u00f7 control pre-activation mean (log scale)")
-    ax.set_title("Magnitude change at the injected target")
+    ax.axvline(1, color=GREY, linewidth=0.8)
+    ax.set_xlabel("Post-activation mean divided by the control's pre-activation mean (log scale)")
     for y, (r, det) in enumerate(zip(df.ratio, df.post_alerts > 0)):
-        ax.text(r * 1.15, y, f"{r:,.1f}\u00d7" + ("" if det else "  (no alert)"),
-                va="center", fontsize=8.5)
+        ax.text(r * 1.15, y, f"{r:,.1f}×" + ("" if det else "  no alert"),
+                va="center", fontsize=7, color=INK)
     ax.set_xlim(0.7, df.ratio.max() * 12)
-    ax.text(0.995, 0.03,
-            "Ratios are not comparable across metrics: KS D is bounded by 1,\n"
-            "the chi-square statistic is unbounded. See Chapter 5.",
-            transform=ax.transAxes, ha="right", va="bottom",
-            fontsize=8, style="italic", color="#555555")
-    fig.savefig(f"{OUT}/fig_magnitude_ratio.png")
-    plt.close(fig)
-    print("fig_magnitude_ratio.png")
+    ax.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:,.0f}"))
+    ax.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
+    _print_axes(ax)
+    ax.grid(False)
+    ax.tick_params(axis="y", length=0)
+    _save_print(fig, "fig_magnitude_ratio")
+    for _, r in df.iterrows():
+        print(f"    {r.label:<34} {r.ratio:8.1f}x")
 
 
 # ---------------------------------------------------------------- figure 4
@@ -267,23 +246,99 @@ def fig_classification():
             pivot[c] = 0
     pivot = pivot[order].sort_index()
 
-    fig, ax = plt.subplots(figsize=(8, 4.8))
+    fig, ax = plt.subplots(figsize=(TEXT_W, 2.9))
     bottom = np.zeros(len(pivot))
     for c in order:
-        ax.bar(pivot.index, pivot[c], bottom=bottom, label=c.replace("_", " ").title(),
-               color=colours[c], edgecolor="white", width=.62)
+        ax.bar(pivot.index, pivot[c], bottom=bottom,
+               label=c.replace("_", " ").capitalize(),
+               color=colours[c], edgecolor="white", linewidth=0.6, width=.62)
         bottom += pivot[c].values
     ax.set_ylabel("Alerts")
-    ax.set_title("Alert classification by scenario")
-    ax.legend(frameon=False, fontsize=9, ncol=2, loc="upper left")
-    ax.text(0.995, 0.02,
-            "C0 is baseline variation by construction: the control defines the reference.\n"
-            "No alert was left unattributed; Chapter 5 reports how sensitive that is to the rule.",
-            transform=ax.transAxes, ha="right", va="bottom",
-            fontsize=8, style="italic", color="#555555")
-    fig.savefig(f"{OUT}/fig_classification.png")
+    ax.set_ylim(0, bottom.max() * 1.22)
+    ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:,.0f}"))
+    _print_axes(ax)
+    ax.tick_params(axis="x", length=0, labelsize=8, colors=INK)
+    ax.legend(frameon=False, fontsize=7, ncol=4, loc="upper left", handlelength=1.2)
+    _save_print(fig, "fig_classification")
+    print(pivot.astype(int).to_string())
+
+
+# ===================================================================== PRINT
+# The four functions below draw the figures that appear in the thesis body.
+# They follow one set of rules so that the figures read as a set:
+#   * no title and no explanatory note inside the image; the thesis caption
+#     carries both
+#   * sized for a 16 cm text width, 7 to 8 pt type, thin lines
+#   * the colours of the earlier versions, so the figures stay recognisable
+TEXT_W = 6.3          # inches, 16 cm
+INK, MUTED = "#1A1A1A", "#555555"
+PURPLE = "#7B5EA7"
+
+
+def _print_axes(ax):
+    """Recessive axes for a printed chart."""
+    ax.grid(False)
+    ax.grid(axis="y", color="#E3E3E3", linewidth=0.5)
+    ax.set_axisbelow(True)
+    for s in ("left", "bottom"):
+        ax.spines[s].set_linewidth(0.6)
+        ax.spines[s].set_color(MUTED)
+    ax.tick_params(labelsize=7.5, colors=MUTED, width=0.6)
+    ax.xaxis.label.set_size(8)
+    ax.yaxis.label.set_size(8)
+
+
+def _save_print(fig, name):
+    fig.savefig(f"{OUT}/{name}.png", dpi=300, bbox_inches="tight", pad_inches=0.03)
     plt.close(fig)
-    print("fig_classification.png")
+    print(name + ".png")
+
+
+class _Diagram:
+    """A drawing surface measured in centimetres, so that boxes and type keep
+    their size when the figure is placed at the full text width."""
+
+    def __init__(self, w_cm, h_cm, x0=0.0, y0=0.0):
+        self.fig = plt.figure(figsize=(w_cm / 2.54, h_cm / 2.54))
+        self.ax = self.fig.add_axes([0, 0, 1, 1])
+        self.ax.set_xlim(x0, x0 + w_cm)
+        self.ax.set_ylim(y0, y0 + h_cm)
+        self.ax.axis("off")
+
+    def box(self, x, y, w, h, text, face, edge, tc=INK, live=True, bold=False,
+            fs=7.5, square=False):
+        self.ax.add_patch(FancyBboxPatch(
+            (x - w / 2, y - h / 2), w, h,
+            boxstyle="square,pad=0" if square else "round,pad=0,rounding_size=0.12",
+            facecolor=face if live else PALE, edgecolor=edge if live else "#5A5A5A",
+            linewidth=0.9, linestyle="-" if live else (0, (3, 2)), zorder=2))
+        self.ax.text(x, y, text, ha="center", va="center", fontsize=fs,
+                     color=tc if live else "#242424",
+                     fontweight="bold" if bold else "normal",
+                     linespacing=1.25, zorder=3)
+        return (x, y, w, h)
+
+    def arrow(self, p1, p2, live=True, rad=0.0, both=False):
+        self.ax.add_patch(FancyArrowPatch(
+            p1, p2, arrowstyle=("<|-|>" if both else "-|>") + ",head_length=3.2,head_width=1.8",
+            color=INK if live else "#9A9A9A", linewidth=0.8,
+            linestyle="-" if live else (0, (3, 2)),
+            connectionstyle=f"arc3,rad={rad}", shrinkA=0, shrinkB=0, zorder=1))
+
+    def line(self, pts, live=True):
+        xs, ys = zip(*pts)
+        self.ax.plot(xs, ys, color=INK if live else "#9A9A9A", linewidth=0.8,
+                     linestyle="-" if live else (0, (3, 2)), zorder=1)
+
+    def label(self, x, y, text, live=True, ha="left"):
+        self.ax.text(x, y, text, fontsize=7, ha=ha, va="center",
+                     color=MUTED if live else "#9A9A9A", zorder=4)
+
+
+def _E(b): return (b[0] + b[2] / 2, b[1])
+def _W(b): return (b[0] - b[2] / 2, b[1])
+def _N(b): return (b[0], b[1] + b[3] / 2)
+def _S(b): return (b[0], b[1] - b[3] / 2)
 
 
 # ---------------------------------------------------------------- figure 5
@@ -302,11 +357,13 @@ def fig_decision_tree():
           empirical, present in control    -> SUPPRESS
       same feature and metric in control   -> SUPPRESS
       otherwise (unexplained)
+          chi-square                       -> MONITOR
           magnitude >= 2x threshold        -> INVESTIGATE
           otherwise                        -> MONITOR
+
+    Which paths were exercised is read from the stored evidence, so a path
+    no alert took is drawn dashed rather than assumed.
     """
-    # Which paths were exercised is read from the stored evidence, not assumed:
-    # each alert records the rule that labelled it (alert_classifier.classify).
     try:
         ex = q("""SELECT
               (SELECT COUNT(*) FROM dq_monitoring.schema_snapshots
@@ -330,429 +387,294 @@ def fig_decision_tree():
         return
     saw_empirical = saw_emp_accept or saw_emp_suppress
 
-    fig, ax = plt.subplots(figsize=(15.5, 11))
-    ax.set_xlim(0, 17.4); ax.set_ylim(0, 16.6); ax.axis("off")
+    d = _Diagram(16, 13.0)
+    W_, H_, AW, AH = 4.8, 0.95, 2.6, 0.62
+    X0, X1, X2, X3 = 2.7, 7.45, 10.75, 14.25
 
-    def box(x, y, w, h, text, colour, fs=10, live=True):
-        ax.add_patch(FancyBboxPatch(
-            (x - w/2, y - h/2), w, h,
-            boxstyle="round,pad=0.02,rounding_size=0.09",
-            facecolor=colour if live else PALE,
-            edgecolor="white" if live else "#5A5A5A",
-            linestyle="-" if live else (0, (3, 2)),
-            linewidth=1.6, zorder=2))
-        ax.text(x, y, text, ha="center", va="center",
-                color="white" if live else "#242424",
-                fontsize=fs, fontweight="bold", zorder=3)
+    def crit(x, y, w, h, text, live=True, fs=7.5):
+        return d.box(x, y, w, h, text, BLUE, BLUE, tc="white", live=live, fs=fs)
 
-    def arrow(x1, y1, x2, y2, lbl=None, lx=None, ly=None, live=True):
-        ax.add_patch(FancyArrowPatch(
-            (x1, y1), (x2, y2), arrowstyle="-|>", mutation_scale=14,
-            color="#555555" if live else "#9A9A9A", linewidth=1.3,
-            linestyle="-" if live else (0, (3, 2)), zorder=1))
-        if lbl:
-            ax.text(lx if lx is not None else (x1 + x2) / 2,
-                    ly if ly is not None else (y1 + y2) / 2 + .28,
-                    lbl, fontsize=9, style="italic", ha="center", va="center",
-                    color="#333333" if live else "#8A8A8A", zorder=4,
-                    bbox=dict(facecolor="white", edgecolor="none", pad=1.4))
+    def action(x, y, text, live=True, w=AW):
+        return d.box(x, y, w, AH, text, GREEN, GREEN, tc="white", live=live, bold=True)
 
-    SX, SW = 3.0, 4.2
+    start = crit(X0, 12.4, W_, 0.55, "Alert on one feature and metric")
+    c7 = crit(X0, 11.1, W_, H_, "C7  Schema change recorded\nfor this window?")
+    inv7 = action(X1, 11.1, "INVESTIGATE", live=saw_schema)
+    d.arrow(_S(start), _N(c7))
+    d.arrow(_E(c7), _W(inv7), live=saw_schema)
+    d.label(5.4, 11.28, "yes", live=saw_schema)
 
-    box(SX, 15.6, SW, .62, "Alert on feature X", BLUE)
-    box(SX, 14.3, SW, .95, "C7  Schema change\nin this window?", BLUE)
-    arrow(SX, 15.29, SX, 14.78)
-    box(8.6, 14.3, 2.9, .62, "INVESTIGATE", GREEN, 11, live=saw_schema)
-    arrow(5.1, 14.3, 7.15, 14.3, "yes", 6.1, 14.62, live=saw_schema)
+    c1 = crit(X0, 9.3, W_, H_, "C1  Injected target, window\nat or after activation?")
+    chi = crit(X1, 9.3, 3.0, H_, "Metric is\nchi-square?")
+    act = action(X3, 9.3, "ACT", w=2.2)
+    c4 = crit(X2, 8.0, 3.2, H_, "C4  Value at least twice\nthe threshold?")
+    inv4 = action(X3, 6.95, "INVESTIGATE")
+    d.arrow(_S(c7), _N(c1)); d.label(X0 + 0.15, 10.2, "no")
+    d.arrow(_E(c1), _W(chi)); d.label(5.4, 9.48, "yes")
+    d.arrow(_E(chi), _W(act)); d.label(10.3, 9.48, "yes")
+    d.line([_S(chi), (X1, 8.0)]); d.arrow((X1, 8.0), _W(c4)); d.label(X1 + 0.15, 8.65, "no")
+    d.line([_E(c4), (X3, 8.0)]); d.arrow((X3, 8.0), _S(act)); d.label(X3 + 0.15, 8.65, "yes")
+    d.line([_S(c4), (X2, 6.95)]); d.arrow((X2, 6.95), _W(inv4)); d.label(X2 + 0.15, 7.2, "no")
 
-    # C1 -------------------------------------------------------------------
-    box(SX, 12.4, SW, 1.05, "C1  Injected target,\nwindow at/after activation?", BLUE, 9.5)
-    arrow(SX, 13.82, SX, 12.93, "no", SX + .42, 13.38)
-    box(7.9, 12.4, 2.9, .95, "Metric is\nchi-square?", BLUE)
-    arrow(5.1, 12.4, 6.45, 12.4, "yes", 5.8, 12.72)
-    box(15.5, 12.9, 2.1, .62, "ACT", GREEN, 11.5)
-    box(11.9, 11.5, 3.4, .95, "C4  Magnitude\n\u2265 2\u00d7 threshold?", BLUE, 9.5)
-    box(15.4, 10.6, 3.0, .62, "INVESTIGATE", GREEN, 10.5)
-    arrow(9.35, 12.62, 14.45, 12.9, "yes", 11.6, 13.05)
-    arrow(9.35, 12.1, 10.2, 11.75, "no", 9.75, 11.72)
-    arrow(13.6, 11.72, 14.45, 12.68, "yes", 13.7, 12.32)
-    arrow(13.6, 11.22, 13.9, 10.8, "no", 13.55, 10.86)
+    c2 = crit(X0, 5.75, W_, H_, "C2  Declared edge from an injected\nfeature, at or after activation?", fs=7.2)
+    edge = crit(X1, 5.75, 3.0, AH, "Edge type?")
+    acc = action(X3, 5.75, "ACCEPT")
+    c3e = crit(X2, 4.45, 3.2, H_, "C3  Same pair alerted\nin the control?", live=saw_empirical)
+    sup2 = action(X3, 3.35, "SUPPRESS", live=saw_emp_suppress)
+    d.arrow(_S(c1), _N(c2)); d.label(X0 + 0.15, 7.5, "no")
+    d.arrow(_E(c2), _W(edge)); d.label(5.4, 5.93, "yes")
+    d.arrow(_E(edge), _W(acc)); d.label(9.4, 5.93, "deterministic")
+    d.line([_S(edge), (X1, 4.45)], live=saw_empirical)
+    d.arrow((X1, 4.45), _W(c3e), live=saw_empirical)
+    d.label(X1 + 0.15, 5.0, "empirical", live=saw_empirical)
+    d.line([_E(c3e), (X3, 4.45)], live=saw_emp_accept)
+    d.arrow((X3, 4.45), _S(acc), live=saw_emp_accept)
+    d.label(X3 + 0.15, 4.85, "no", live=saw_emp_accept)
+    d.line([_S(c3e), (X2, 3.35)], live=saw_emp_suppress)
+    d.arrow((X2, 3.35), _W(sup2), live=saw_emp_suppress)
+    d.label(X2 + 0.15, 3.7, "yes", live=saw_emp_suppress)
 
-    # C2 -------------------------------------------------------------------
-    box(SX, 9.4, SW, 1.05, "C2  Declared dependency edge\nfrom an injected feature?", BLUE, 9.5)
-    arrow(SX, 11.87, SX, 9.93, "no", SX + .42, 10.9)
-    box(7.9, 9.4, 2.9, .62, "Edge type?", BLUE)
-    arrow(5.1, 9.4, 6.45, 9.4, "yes", 5.8, 9.72)
-    box(15.5, 8.5, 2.3, .62, "ACCEPT", GREEN, 11.5)
-    box(11.9, 7.4, 3.4, .95, "C3  Alerted in the\nclean control?", BLUE, 9.5, live=saw_empirical)
-    box(15.4, 6.1, 2.6, .62, "SUPPRESS", GREEN, 11, live=saw_emp_suppress)
-    arrow(9.35, 9.25, 14.35, 8.62, "deterministic", 11.7, 9.22)
-    arrow(9.35, 9.05, 10.2, 7.7, "empirical", 9.55, 8.28, live=saw_empirical)
-    arrow(13.6, 7.62, 14.35, 8.38, "no", 13.7, 8.16, live=saw_emp_accept)
-    arrow(13.6, 7.12, 14.1, 6.3, "yes", 13.62, 6.66, live=saw_emp_suppress)
+    c3 = crit(X0, 2.75, W_, H_, "C3  Same feature and metric\nalerted in the control?")
+    sup = action(X1, 2.75, "SUPPRESS")
+    d.arrow(_S(c2), _N(c3)); d.label(X0 + 0.15, 4.25, "no")
+    d.arrow(_E(c3), _W(sup)); d.label(5.4, 2.93, "yes")
 
-    # C3 -------------------------------------------------------------------
-    box(SX, 6.5, SW, 1.05, "C3  Same feature and metric\nalerted in the clean control?", BLUE, 9.5)
-    arrow(SX, 8.87, SX, 7.03, "no", SX + .42, 7.95)
-    box(8.6, 6.5, 2.6, .62, "SUPPRESS", GREEN, 11)
-    arrow(5.1, 6.5, 7.3, 6.5, "yes", 6.2, 6.82)
-
-    # unexplained ----------------------------------------------------------
-    box(SX, 4.0, SW, .95, "C4  Magnitude\n\u2265 2\u00d7 threshold?", BLUE, 9.5, live=saw_unexpl)
-    arrow(SX, 5.97, SX, 4.48, "no \u2014 unexplained", SX + 1.35, 5.24, live=saw_unexpl)
-    box(8.6, 4.5, 2.9, .62, "INVESTIGATE", GREEN, 10.5, live=saw_unexpl)
-    box(8.6, 2.9, 2.6, .62, "MONITOR", GREEN, 11, live=saw_unexpl)
-    arrow(5.1, 4.18, 7.15, 4.5, "yes", 6.05, 4.72, live=saw_unexpl)
-    arrow(5.1, 3.8, 7.3, 3.0, "no", 6.1, 3.14, live=saw_unexpl)
+    c4u = crit(X0, 1.0, W_, H_, "C4  Value at least twice the\nthreshold? (chi-square: no)",
+               live=saw_unexpl)
+    invu = action(X1, 1.45, "INVESTIGATE", live=saw_unexpl)
+    mon = action(X1, 0.45, "MONITOR", live=saw_unexpl)
+    d.arrow(_S(c3), _N(c4u), live=saw_unexpl)
+    d.label(X0 + 0.15, 1.88, "no (unexplained)", live=saw_unexpl)
+    d.arrow((X0 + W_ / 2, 1.2), _W(invu), live=saw_unexpl)
+    d.label(5.55, 1.5, "yes", live=saw_unexpl)
+    d.arrow((X0 + W_ / 2, 0.8), _W(mon), live=saw_unexpl)
+    d.label(5.55, 0.45, "no", live=saw_unexpl)
 
     handles = [mpatches.Patch(color=BLUE, label="Decision criterion"),
                mpatches.Patch(color=GREEN, label="Recommended action")]
     if not (saw_schema and saw_unexpl and saw_emp_accept and saw_emp_suppress):
         handles.append(Line2D([0], [0], color="#5A5A5A", linestyle=(0, (3, 2)),
-                              linewidth=1.6,
-                              label="Path not exercised by the experiments"))
-    ax.legend(handles=handles, loc="lower left", frameon=False, fontsize=10.5,
-              bbox_to_anchor=(0.005, 0.005))
-    ax.text(0.68, 0.02,
-            "Chi-square alerts bypass C4: the statistic has no bounded scale, so an\n"
-            "unexplained chi-square alert always reaches MONITOR.",
-            transform=ax.transAxes, ha="center", va="bottom",
-            fontsize=9, style="italic", color="#555555")
-    ax.set_title("Alert Interpretation Framework: decision tree (D1)",
-                 fontsize=15, fontweight="bold", pad=14)
-    fig.savefig(f"{OUT}/fig_decision_tree.png")
-    plt.close(fig)
-    print("fig_decision_tree.png")
+                              linewidth=0.9, label="Path taken by no alert"))
+    d.ax.legend(handles=handles, loc="lower right", frameon=False, fontsize=7.5,
+                bbox_to_anchor=(0.99, 0.0))
+    _save_print(d.fig, "fig_decision_tree")
     print(f"    schema branch exercised: {saw_schema}; "
           f"unexplained branch exercised: {saw_unexpl}; "
           f"empirical edge -> ACCEPT: {saw_emp_accept}; "
           f"empirical edge -> SUPPRESS: {saw_emp_suppress}")
 
 
+
 # ---------------------------------------------------------------- figure 5b
 def fig_replay_pipeline():
-    """Configure / replay / analyse pipeline, one row per registered run.
+    """When each registered run was executed, read from the experiments table.
 
-    The run list, dates and alert totals are queried so that adding a
-    scenario (as S7 did) only requires re-running this script, not redrawing
-    the diagram by hand.
+    The run list and start times are queried, so the figure states the order
+    in which the runs were actually made rather than the order they were
+    planned in. Classification and the interpretation framework were applied
+    to all eight runs together after the last run.
     """
-    runs = q("""
-        SELECT e.scenario, e.started_at::date AS run_date, COUNT(ac.id) AS alerts
-        FROM dq_monitoring.experiments e
-        LEFT JOIN dq_monitoring.alert_classifications ac
-               ON ac.experiment_id = e.experiment_id
-        WHERE e.scenario <> 'PILOT'
-        GROUP BY e.scenario, e.started_at
-        ORDER BY e.started_at""")
+    runs = q("""SELECT scenario, experiment_id, started_at
+                FROM dq_monitoring.experiments ORDER BY started_at""")
     if runs.empty:
-        print("  ! no non-pilot runs found; skipping fig_replay_pipeline")
+        print("  ! no runs found; skipping fig_replay_pipeline")
         return
+    runs["t"] = pd.to_datetime(runs.started_at, utc=True).dt.tz_localize(None)
+    C_PILOT, C_CLEAN, C_INJ, C_POST = PURPLE, "#C0435A", GREEN, "#D98A3D"
 
-    total_alerts = int(runs.alerts.sum())
-    n_runs = len(runs)
-    n_registered = 5 + n_runs  # five pilot window-size replays, fixed
+    def colour(s):
+        return C_PILOT if s == "PILOT" else C_CLEAN if s in ("C0", "S7") else C_INJ
 
-    injected = {"C0": "clean control", "S1": "mean shift · fare_amount",
-                "S2": "value swap · payment_type",
-                "S3": "rare category · RatecodeID",
-                "S4": "variance shift · trip_distance",
-                "S5": "mixed · fare + payment",
-                "S6": "unseen category · RatecodeID",
-                "S7": "schema change · trip_source_system"}
-    no_injection = {"C0", "S7"}  # grouped in drift_injection.apply_scenario()
+    # runs started within six hours of each other share one label
+    groups = []
+    for _, r in runs.iterrows():
+        kind = "PILOT" if r.scenario == "PILOT" else r.scenario
+        if groups and (r.t - groups[-1]["t1"]) < pd.Timedelta(hours=6) and \
+                (kind == "PILOT") == (groups[-1]["kind"] == "PILOT"):
+            groups[-1]["names"].append(kind); groups[-1]["t1"] = r.t
+        else:
+            groups.append(dict(kind=kind, names=[kind], t0=r.t, t1=r.t))
 
-    fig, ax = plt.subplots(figsize=(14.6, 15.5))
-    row_h, row_w = 0.66, 4.9
-    step = row_h + .12
-    n = len(runs)
-    vx = 11.1  # x-centre of the right-hand (host process / outcome) column
+    def label(g):
+        if g["kind"] == "PILOT":
+            return f"Window-size pilot,\n{len(g['names'])} sizes"
+        n = g["names"]
+        return n[0] if len(n) == 1 else f"{n[0]} to {n[-1]}"
 
-    def box(x, y, w, h, text, colour, fs=10.5, style="round,pad=0.02,rounding_size=0.09"):
-        ax.add_patch(FancyBboxPatch((x - w / 2, y - h / 2), w, h, boxstyle=style,
-                                     facecolor=colour, edgecolor="white",
-                                     linewidth=1.6, zorder=2))
-        ax.text(x, y, text, ha="center", va="center", color="#1a1a1a" if colour in
-                (GREY, "#EFEFEF") else "white", fontsize=fs, fontweight="bold", zorder=3)
+    fig, ax = plt.subplots(figsize=(TEXT_W, 1.7))
+    t_min = runs.t.min().normalize() - pd.Timedelta(days=1)
+    t_max = runs.t.max().normalize() + pd.Timedelta(days=1, hours=12)
+    ax.scatter(runs.t, np.zeros(len(runs)), s=26, zorder=3,
+               color=[colour(s) for s in runs.scenario], edgecolor="white", linewidth=0.6)
+    # place each label on the lowest level where it neither overlaps another
+    # label nor is crossed by another label's leader line
+    days_per_inch = (t_max - t_min) / pd.Timedelta(days=1) / (TEXT_W * 0.8)
+    placed = []                                   # (x, half_width, level)
+    for g in groups:
+        tm = g["t0"] + (g["t1"] - g["t0"]) / 2
+        x = (tm - t_min) / pd.Timedelta(days=1)
+        half = max(len(s) for s in label(g).split("\n")) * 0.058 * days_per_inch / 2 + 0.15
+        for level in (0.35, 0.8, 1.25):
+            clash = any(abs(x - px) < half + ph and pl == level for px, ph, pl in placed)
+            clash |= any(pl < level and abs(x - px) < ph for px, ph, pl in placed)
+            clash |= any(pl > level and abs(px - x) < half for px, ph, pl in placed)
+            if not clash:
+                break
+        placed.append((x, half, level))
+        ax.plot([tm, tm], [0.07, level - 0.04], color=MUTED, linewidth=0.6)
+        ax.text(tm, level, label(g), ha="center", va="bottom", fontsize=7, color=INK,
+                linespacing=1.15)
 
-    def arrow(x1, y1, x2, y2, dashed=False, colour="#555555", rad=0.0):
-        ax.add_patch(FancyArrowPatch((x1, y1), (x2, y2), arrowstyle="-|>",
-                                     mutation_scale=13, color=colour, linewidth=1.3,
-                                     linestyle=(0, (4, 2)) if dashed else "-",
-                                     connectionstyle=f"arc3,rad={rad}", zorder=1))
+    # classification and the framework follow the last run
+    ax.annotate("Classification and\nframework, all eight\nruns together",
+                xy=(t_max, 0), xytext=(t_max + pd.Timedelta(days=0.6), 0),
+                fontsize=7, color=INK, va="center", ha="left",
+                bbox=dict(boxstyle="round,pad=0.35", facecolor="#FAE8CE",
+                          edgecolor=C_POST, linewidth=0.8),
+                arrowprops=dict(arrowstyle="<-", color=MUTED, linewidth=0.8))
 
-    ax.axis("off")
-
-    # CONFIGURE -------------------------------------------------------------
-    cfg_y = 3 * step + n * step + 4.6
-    box(2.7, cfg_y, 6.2, 1.15, "pilot_window_size.py\n5 window sizes · 200,000-row clean slice · February",
-        "#7B5EA7", 8.6)
-    arrow(5.85, cfg_y, 6.75, cfg_y)
-    box(10.0, cfg_y, 6.2, 1.15, "window size fixed at 10,000\nchosen before any scenario was run", GREY, 8.6)
-    ax.text(2.7, cfg_y - 1.0,
-            "Re-run to record feature_type, so PSI could be reported separately for\n"
-            "numerical and categorical features. Two replays agreed.",
-            fontsize=8.2, style="italic", ha="center", color="#444444")
-
-    # REPLAY ------------------------------------------------------------------
-    rect_top = cfg_y - 2.1
-    replay_top = rect_top - 1.1
-    replay_bottom = replay_top - (n - 1) * step
-    rect_bottom = replay_bottom - row_h / 2 - .35
-    ax.add_patch(plt.Rectangle((0.15, rect_bottom), 5.75, rect_top - rect_bottom,
-                               facecolor="none", edgecolor="#888888",
-                               linestyle=(0, (3, 2)), linewidth=1.2, zorder=0))
-    ax.text(0.35, rect_top - .3,
-            "Each run: reset the topic, replay 41,169,720 rows,\nthen three consumers. ~3 hours.",
-            fontsize=8.2, style="italic", ha="left", va="top", color="#444444")
-
-    row_y = {}
-    for i, r in runs.iterrows():
-        y = replay_top - i * step
-        row_y[r.scenario] = y
-        colour = "#C0435A" if r.scenario in no_injection else "#2E7D46"
-        box(2.7, y, row_w, row_h, f"{r.scenario}   {injected[r.scenario]}", colour, 10)
-        ax.text(6.3, y, f"{int(r.alerts):,} alerts", fontsize=8.5, color="#333333", ha="left", va="center")
-
-    # verify_experiment.py gate: routed above the row stack so it never
-    # crosses the per-row date/alert text.
-    verify_y = replay_top + .95
-    box(vx, verify_y, 5.4, 1.35, "verify_experiment.py\nrun between replays · checks four tables\n"
-        "are populated and prints the activation point", "#D98A3D", 8.4)
-    ax.text(vx + .35, verify_y - .68, "per-run gate", fontsize=8, style="italic", color="#7a5122", ha="left")
-    arrow(3.3, rect_top, vx - 2.55, verify_y + .15, dashed=True, rad=-0.25)
-    ax.text(5.4, rect_top + .55, "after each run", fontsize=7.8, style="italic", color="#666666", ha="center")
-
-    dq_y = rect_bottom - 1.15
-    box(vx, dq_y, 5.4, 1.35,
-        f"dq_monitoring\n7 tables · {total_alerts:,} alerts across the {_num_word(n_runs)} runs\n"
-        f"4,117 windows and 90,574 scores per run", GREY, 8.4)
-    arrow(vx, verify_y - .68, vx, dq_y + .68)
-    ax.text(vx, dq_y - .85, f"all {_num_word(n_runs)} runs must be complete", fontsize=8,
-            style="italic", color="#444444", ha="center")
-    arrow(3.3, rect_bottom, vx - 2.6, dq_y + .5, rad=0.18)
-
-    # ANALYSE -----------------------------------------------------------------
-    an_y1 = dq_y - 2.35
-    box(2.7, an_y1, 7.8, 1.55,
-        "classify_alerts.py · apply_framework.py\nrequires C0 present: it is the reference for "
-        "BASELINE_VARIATION\nTRUNCATE then rebuild, so every run is relabelled together",
-        "#D98A3D", 7.9)
-    arrow(3.3, rect_bottom, 2.7, an_y1 + .775, rad=-0.12)
-
-    an_y2 = an_y1 - 1.85
-    box(2.7, an_y2, 6.6, 1.2,
-        "build_result_tables · generate_figures ·\nblind_mode_eval · blind_mode_v2\n"
-        "result tables → results/ · figures → figures/ · the RQ4 evaluation",
-        "#D98A3D", 8.3)
-    arrow(2.7, an_y1 - .775, 2.7, an_y2 + .6)
-
-    box(vx, an_y1, 5.4, 2.05,
-        "What the sequence constrains\nClassification cannot run before C0 exists.\n"
-        "Adding a scenario relabels every earlier run.\n"
-        "S6 was added after S1–S5 and forced a full\nreclassification: 82,816 → 97,643.\n"
-        "S7 was added after S1–S6 and forced a full\nreclassification: 97,643 → 108,665.",
-        GREY, 8.0)
-    arrow(6.6, an_y1, vx - 2.7, an_y1, dashed=True)
-
-    # caption -------------------------------------------------------------
-    n_pilot = 5
-    cap_y = an_y2 - 1.5
-    ax.text(0.15, cap_y,
-            f"{_num_word(n_pilot + n_runs).capitalize()} registered runs: {_num_word(n_pilot)} pilot replays "
-            f"over a 200,000-row slice, and {_num_word(n_runs)} full replays of 41,169,720 rows each.\n"
-            f"The corpus was streamed in full {_num_word(n_runs)} times. Every replay recreates the Kafka "
-            "topic with a single partition, so no run inherits state\n"
-            "from another. The activation point is identical in all "
-            f"{_num_word(n_runs)}: row 20,584,860, event time 2024-07-03 23:35:25. The pilot rows in the\n"
-            "database are from a later re-run of the window-size study, not the original one.",
-            fontsize=8.2, style="italic", color="#444444", ha="left", va="top")
-
-    legend_items = [
-        ("#7B5EA7", "Configuration study"), ("#C0435A", "Clean/no-injection replay"),
-        ("#2E7D46", "Drift-injection replay"), ("#D98A3D", "Host process"),
-        (GREY, "Outcome or stored state"),
-    ]
-    leg_y = cap_y - 1.6
-    lx = 0.15
-    for colour, label in legend_items:
-        ax.add_patch(plt.Rectangle((lx, leg_y - .11), .3, .22, facecolor=colour, edgecolor="none"))
-        ax.text(lx + .42, leg_y, label, fontsize=8.8, va="center", ha="left", color="#222222")
-        lx += .42 + len(label) * .082 + .5
-
-    ax.set_xlim(-1.3, 15.6)
-    ax.set_ylim(leg_y - .7, cfg_y + 1.0)
-    fig.savefig(f"{OUT}/fig_replay_pipeline.png")
-    plt.close(fig)
-    print("fig_replay_pipeline.png")
-    print(f"    {n_runs} runs, {total_alerts:,} alerts, {n_registered} registered runs total")
+    ax.set_ylim(-0.45, 1.85)
+    ax.set_xlim(t_min, t_max)
+    ax.yaxis.set_visible(False)
+    for side in ("left", "top", "right"):
+        ax.spines[side].set_visible(False)
+    ax.spines["bottom"].set_position(("data", 0))
+    ax.spines["bottom"].set_color(MUTED)
+    ax.spines["bottom"].set_linewidth(0.8)
+    ax.xaxis.set_major_locator(matplotlib.dates.DayLocator(interval=2))
+    ax.xaxis.set_major_formatter(matplotlib.dates.DateFormatter("%d %b"))
+    ax.tick_params(axis="x", labelsize=7, colors=MUTED, length=3, width=0.6)
+    ax.grid(False)
+    handles = [Line2D([0], [0], marker="o", linestyle="", markersize=5, color=c, label=l)
+               for c, l in [(C_PILOT, "Window-size pilot"), (C_CLEAN, "No injection (C0, S7)"),
+                            (C_INJ, "Injection (S1 to S6)")]]
+    ax.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.63, 1.02), ncol=1,
+              frameon=False, fontsize=7, handletextpad=0.3, labelspacing=0.3)
+    _save_print(fig, "fig_replay_pipeline")
+    for _, r in runs.iterrows():
+        print(f"    {r.t:%Y-%m-%d %H:%M}  {r.experiment_id}")
 
 
 # ---------------------------------------------------------------- figure 5c
 def fig_system_architecture():
-    """Whole-system architecture: corpus to recommended action, full detail.
+    """The artifact as designed: ingest, monitor each window, store and track,
+    and interpret after all runs.
 
-    Restores the full-detail layout (every script, table, and adapter
-    boundary) after a plainer 7-stage version proved too thin on detail for
-    a technical reader; this keeps that detail but draws every connector
-    thick and near-black instead of the original's 1.3pt mid-grey lines,
-    which were hard to see at a glance. Static and dateless -- it draws
-    code structure, not experiment results, so it takes no database query.
+    Static: it draws the design, not experiment results, so it takes no
+    database query. Italic names are the adapter interfaces of Table 4.2.
     """
-    fig, ax = plt.subplots(figsize=(17.2, 21.4))
-    ax.axis("off")
-    ax.set_xlim(-0.5, 17.7)
-    ax.set_ylim(-2.0, 20.8)
+    # fill, outline and text colour per kind of component
+    KIND = {"data":   ("#F2F0EB", "#5F5E5A", "#2C2C2A"),   # data and artifacts
+            "run":    ("#E1F5EE", "#0F6E56", "#085041"),   # host process, during a run
+            "docker": ("#E6F1FB", "#185FA5", "#0C447C"),   # Docker service
+            "after":  ("#EEEDFE", "#534AB7", "#3C3489"),   # host process, after the runs
+            "output": ("#FAEEDA", "#854F0B", "#633806")}   # output
+    LINE, NOTE, RULE = "#444441", "#5F5E5A", "#B4B2A9"
 
-    PURPLE, TEAL, GOLD = "#7B5EA7", "#2E7D46", "#B8860B"
-    ADAPTER_BLUE, HOST_ORANGE, STORE_GREY = "#2E5C8A", "#D98A3D", "#888888"
-    LINE = "#1A1A1A"
+    d = _Diagram(16.2, 8.7, x0=0.0, y0=1.75)
+    ax = d.ax
 
-    def box(x, y, w, h, text, colour, fs=9.5):
-        ax.add_patch(FancyBboxPatch(
-            (x - w / 2, y - h / 2), w, h,
-            boxstyle="round,pad=0.02,rounding_size=0.1",
-            facecolor=colour, edgecolor="white", linewidth=2.0, zorder=2))
-        ax.text(x, y, text, ha="center", va="center", color="white" if colour !=
-                STORE_GREY else "#1a1a1a", fontsize=fs, fontweight="bold", zorder=3)
+    def comp(cx, cy, w, h, title, body=(), iface=None, kind="data"):
+        face, edge, tc = KIND[kind]
+        ax.add_patch(FancyBboxPatch((cx - w / 2, cy - h / 2), w, h,
+                                    boxstyle="round,pad=0,rounding_size=0.12",
+                                    facecolor=face, edgecolor=edge, linewidth=0.9, zorder=2))
+        lines = [(title, "bold", "normal")] + [(b, "normal", "normal") for b in body]
+        if iface:
+            lines.append((iface, "normal", "italic"))
+        step = 0.34
+        y = cy + step * (len(lines) - 1) / 2
+        for k, (t, weight, style) in enumerate(lines):
+            ax.text(cx, y - k * step, t, ha="center", va="center", color=tc,
+                    fontsize=7.4 if k == 0 else 6.8, fontweight=weight, style=style, zorder=3)
+        return (cx, cy, w, h)
 
-    def arrow(x1, y1, x2, y2, dashed=False, rad=0.0, colour=LINE, lw=3.0):
-        ax.add_patch(FancyArrowPatch(
-            (x1, y1), (x2, y2), arrowstyle="-|>", mutation_scale=22,
-            color=colour, linewidth=lw, connectionstyle=f"arc3,rad={rad}",
-            linestyle=(0, (5, 3)) if dashed else "-", zorder=1,
-            shrinkA=2, shrinkB=2))
+    def arrow(p1, p2, both=False):
+        ax.add_patch(FancyArrowPatch(p1, p2, arrowstyle=("<|-|>" if both else "-|>")
+                                     + ",head_length=3.2,head_width=1.8", color=LINE,
+                                     linewidth=0.8, shrinkA=0, shrinkB=0, zorder=1))
 
-    def tag(x, y, text):
-        ax.text(x, y, f"⇄ {text}", ha="center", va="center", fontsize=8.6,
-                style="italic", fontweight="bold", color=GOLD, zorder=3)
+    def line(pts):
+        xs, ys = zip(*pts)
+        ax.plot(xs, ys, color=LINE, linewidth=0.8, zorder=1)
 
-    def routed(points, dashed=False, colour=LINE):
-        """A polyline through `points`, with the arrowhead only on the last leg."""
-        xs, ys = zip(*points)
-        ax.plot(xs[:-1], ys[:-1], color=colour, linewidth=3.0,
-                linestyle=(0, (5, 3)) if dashed else "-", zorder=1,
-                solid_capstyle="round")
-        arrow(xs[-2], ys[-2], xs[-1], ys[-1], dashed=dashed, colour=colour)
+    def group(x0, x1, y0, y1):
+        ax.add_patch(FancyBboxPatch((x0, y0), x1 - x0, y1 - y0,
+                                    boxstyle="round,pad=0,rounding_size=0.2",
+                                    facecolor="none", edgecolor="#888780", linewidth=0.7,
+                                    linestyle=(0, (3, 2)), zorder=0))
 
-    # SOURCE -----------------------------------------------------------
-    box(8.6, 19.7, 7.6, 0.9, "data/raw/\n12 Parquet files · 41,169,720 rows", STORE_GREY)
-    arrow(8.6, 19.25, 8.6, 18.45)
+    # column headers
+    for x0, x1, t in [(0.1, 6.0, "Ingest"), (6.25, 9.65, "Monitor each window"),
+                      (9.95, 12.75, "Store and track"), (13.1, 16.1, "Interpret, after all runs")]:
+        ax.text((x0 + x1) / 2, 10.15, t, ha="center", va="center", fontsize=7.6,
+                fontweight="bold", color=NOTE)
+        ax.plot([x0, x1], [9.88, 9.88], color=RULE, linewidth=0.8)
 
-    # SETUP (one-time) ---------------------------------------------------
-    box(2.9, 18.05, 4.8, 0.85, "download_dataset.py", PURPLE, 9)
-    box(8.6, 18.05, 5.2, 0.85, "init_gx_context.py\ncompute_baselines.py", PURPLE, 9)
-    box(14.3, 18.05, 4.8, 0.85, "define_expectations.py", PURPLE, 9)
-    arrow(5.3, 18.05, 6.0, 18.05)
-    arrow(11.2, 18.05, 11.9, 18.05)
-    ax.text(8.6, 18.05 + .62, "SETUP  ·  run once, before any experiment",
-            ha="center", fontsize=9, style="italic", color="#555555")
+    RA, RB = 8.85, 6.3
+    # ingest
+    src = comp(1.5, RA, 2.9, 1.45, "NYC TLC taxi data",
+               ["2024, 12 monthly files", "41,169,720 records"], kind="data")
+    prod = comp(1.5, RB, 2.9, 1.5, "Producer", ["per monthly file:", "sort, inject, publish"],
+                kind="run")
+    kafka = comp(4.6, RB, 2.7, 1.5, "Apache Kafka", ["single partition", "with ZooKeeper"],
+                 "EventSource", kind="docker")
+    scen = comp(3.0, 3.5, 5.9, 1.35, "Scenarios C0 to S7 (Table 3.1)",
+                ["one per replay, change applied from", "row 20,584,860 (3 July 2024)"], kind="data")
+    arrow(_S(src), _N(prod))
+    arrow((1.5, 3.5 + 0.675), _S(prod))
+    arrow(_E(prod), _W(kafka))
 
-    box(8.6, 16.35, 13.0, 1.15,
-        "great_expectations/\nreference_baseline.json · schema_baseline.json · "
-        "taxi_trip_suite.json · feature_dependencies.yaml", STORE_GREY, 9)
-    arrow(2.9, 17.6, 5.0, 16.8, rad=-0.15)
-    arrow(8.6, 17.6, 8.6, 16.95)
-    arrow(14.3, 17.6, 12.2, 16.8, rad=0.15)
+    # monitor each window
+    cx = 7.95
+    ref = comp(cx, RA, 3.1, 1.85, "Reference artifacts",
+               ["1 to 7 January 2024", "bins and frequencies,", "KS sample, schema,",
+                "expectation suite"], kind="data")
+    group(6.25, 9.65, 3.6, 7.55)
+    val = comp(cx, 6.85, 3.1, 1.05, "Validation", ["Great Expectations"], "Validator", kind="run")
+    drf = comp(cx, 5.6, 3.1, 0.85, "Drift", ["PSI, KS, chi-square"], kind="run")
+    sch = comp(cx, 4.35, 3.1, 1.05, "Schema", ["columns against", "the stored schema"], kind="run")
+    ax.text(cx, 3.45, "three consumers, run in turn,\non windows of 10,000 records",
+            ha="center", va="top", fontsize=6.6, style="italic", color=NOTE, linespacing=1.3)
+    arrow(_S(ref), (cx, 7.55))
+    arrow(_E(kafka), (6.25, RB))
 
-    # PER-RUN: inject, then produce --------------------------------------
-    arrow(8.6, 15.75, 8.6, 15.15)
-    box(8.6, 14.65, 9.6, 1.0,
-        "drift_injection.py\nmutates the corpus once per scenario: C0, S1–S7",
-        HOST_ORANGE, 9.5)
-    arrow(8.6, 14.15, 8.6, 13.5)
+    # store and track
+    sx = 11.3
+    air = comp(sx, RA, 2.6, 1.45, "Apache Airflow", ["hourly health check", "daily drift summary"],
+               "Scheduler", kind="docker")
+    pg = comp(sx, RB + 0.2, 2.6, 1.6, "PostgreSQL", ["dq_monitoring,", "seven tables"],
+              "MetricStore", kind="docker")
+    mlf = comp(sx, 3.5, 2.6, 1.25, "MLflow", ["per-window metrics"], "RunTracker", kind="docker")
+    arrow((9.65, 6.85), (sx - 1.3, 6.85))
+    arrow(_N(pg), _S(air))
+    line([(cx + 1.55, 5.6), (sx, 5.6)])
+    arrow((sx, 5.6), _N(mlf))
 
-    # run_experiment.py publishes directly; kafka_producer.py is not used by any
-    # experiment. EventSource is the read side (interfaces.EventSource.windows),
-    # so its boundary sits between the topic and the consumers.
-    box(8.6, 12.95, 12.4, 1.1,
-        "run_experiment.py  →  Apache Kafka (single partition)\n"
-        "publishes every row in event order; writes the experiments row to Postgres once",
-        HOST_ORANGE, 9.3)
-    arrow(8.6, 12.4, 8.6, 12.08)
-    box(8.6, 11.75, 11.0, 0.6,
-        "EventSource: each consumer reads the topic as windows, in its own consumer group",
-        ADAPTER_BLUE, 8.8)
-    tag(15.95, 11.75, "ParquetEventSource")
+    # interpret, after all runs
+    ix = 14.6
+    group(13.1, 16.1, 5.4, 9.75)
+    cls = comp(ix, RA, 2.75, 1.45, "Classification",
+               ["four labels, from the", "control run and the", "dependency map"], kind="after")
+    itp = comp(ix, RB, 2.75, 1.45, "Interpretation", ["framework,", "criteria C1 to C7"],
+               kind="after")
+    act = comp(ix, 3.5, 2.75, 1.45, "Action per alert",
+               ["act, investigate,", "monitor, accept,", "suppress"], kind="output")
+    arrow(_S(cls), _N(itp))
+    arrow(_S(itp), _N(act))
+    arrow((sx + 1.3, RB + 0.2), (13.1, RB + 0.2), both=True)
 
-    arrow(3.6, 11.45, 3.0, 10.75)
-    arrow(8.6, 11.45, 8.6, 10.75)
-    arrow(13.6, 11.45, 14.4, 10.75)
-
-    # THREE CONSUMERS ------------------------------------------------------
-    box(3.0, 10.2, 5.7, 1.05, "kafka_consumer_validation.py\nValidator: validate(df) per window",
-        ADAPTER_BLUE, 9)
-    tag(3.0, 9.38, "PlainValidator")
-
-    box(8.6, 10.2, 5.4, 1.05, "kafka_consumer_drift.py\nPSI · KS · chi² per feature/metric pair",
-        TEAL, 9)
-
-    box(14.7, 10.2, 5.7, 1.05,
-        "kafka_consumer_schema.py\ncolumns compared against schema_baseline.json", TEAL, 9)
-
-    arrow(7.0, 9.65, 6.4, 8.6, rad=0.12)
-    arrow(10.2, 9.65, 10.8, 8.6, rad=-0.12)
-    box(6.4, 8.1, 4.7, 0.8, "MetricStore: write_drift_scores()", ADAPTER_BLUE, 8.6)
-    tag(6.4, 7.45, "CsvMetricStore")
-    box(10.8, 8.1, 4.7, 0.8, "RunTracker: log_params · log_metric", ADAPTER_BLUE, 8.6)
-    tag(10.8, 7.45, "JsonRunTracker")
-
-    # STORAGE ---------------------------------------------------------------
-    box(6.3, 6.05, 10.6, 1.4,
-        "PostgreSQL · dq_monitoring  (container: postgres)\n"
-        "7 tables — experiments, validation_runs, expectation_failures,\n"
-        "quarantined_rows, drift_scores, schema_snapshots, alert_classifications",
-        STORE_GREY, 9)
-    box(14.5, 6.05, 4.4, 1.05, "MLflow tracking\n(container: mlflow)", STORE_GREY, 9)
-
-    arrow(3.0, 9.65, 4.6, 6.8, rad=0.18)            # validation -> postgres
-    arrow(6.4, 7.65, 6.3, 6.8)                        # metricstore -> postgres
-    routed([(14.7, 9.4), (17.0, 9.4), (17.0, 5.1), (9.0, 5.1), (9.0, 5.4)])  # schema -> postgres
-    arrow(10.8, 7.65, 13.3, 6.65, rad=-0.15)          # runtracker -> mlflow
-
-    # POST-HOC ANALYSIS -------------------------------------------------------
-    arrow(5.6, 5.35, 5.0, 4.45)
-    box(4.9, 3.95, 8.2, 1.0,
-        "classify_alerts.py\nAlert Classifier — labels every alert, fixed precedence",
-        HOST_ORANGE, 9)
-    arrow(4.9, 3.45, 4.9, 3.0)
-    box(4.9, 2.5, 8.2, 1.0,
-        "apply_framework.py\nInterpretation Framework — recommended action per alert",
-        HOST_ORANGE, 9)
-
-    box(14.4, 3.95, 6.4, 1.15,
-        "Apache Airflow · webserver + scheduler containers\n"
-        "DAGs read dq_monitoring on a schedule", ADAPTER_BLUE, 8.8)
-    tag(14.4, 3.15, "SequentialScheduler")
-    ax.text(14.4, 2.8, "reads stored results; not on the run's critical path",
-            ha="center", fontsize=7.8, style="italic", color="#555555")
-    arrow(9.5, 6.25, 12.0, 4.5, dashed=True, rad=-0.2, colour="#555555", lw=2.4)
-
-    arrow(3.6, 2.0, 2.6, 1.4, rad=0.1)
-    arrow(6.2, 2.0, 7.2, 1.4, rad=-0.1)
-    box(2.6, 0.9, 6.0, 1.0, "build_result_tables.py · generate_figures.py\n→ results/ · figures/",
-        STORE_GREY, 8.8)
-    box(8.8, 0.9, 5.8, 1.0, "blind_mode_eval.py · blind_mode_v2.py\n→ RQ4 evaluation",
-        STORE_GREY, 8.8)
-
-    # legend ---------------------------------------------------------------
-    legend_items = [(PURPLE, "One-time setup"), (HOST_ORANGE, "Per-run / post-hoc host process"),
-                     (ADAPTER_BLUE, "Adapter boundary (primary shown)"),
-                     (TEAL, "Stream processing"), (STORE_GREY, "Stored output")]
-    ly = -1.3
-    lx = 0.0
-    for colour, label in legend_items:
-        ax.add_patch(plt.Rectangle((lx, ly - .11), .3, .22, facecolor=colour, edgecolor="none"))
-        ax.text(lx + .42, ly, label, fontsize=8.8, va="center", ha="left", color="#222222")
-        lx += .42 + len(label) * .078 + .55
-    ax.text(lx + .3, ly, "⇄ gold text = fallback implementation, evidenced by an equivalence test",
-            fontsize=8.3, style="italic", va="center", ha="left", color=GOLD)
-
-    ax.set_title("System architecture: corpus to recommended action",
-                 fontsize=16, fontweight="bold", pad=18)
-    fig.savefig(f"{OUT}/fig_system_architecture.png")
-    plt.close(fig)
-    print("fig_system_architecture.png")
+    # legend
+    items = [("data", "Data and artifacts"), ("run", "Host process, during a run"),
+             ("docker", "Docker service"), ("after", "Host process, after the runs"),
+             ("output", "Output")]
+    handles = [mpatches.Patch(facecolor=KIND[k][0], edgecolor=KIND[k][1], linewidth=0.9, label=l)
+               for k, l in items]
+    handles.append(Line2D([0], [0], linestyle="", label="$\\it{Italic}$: adapter interface"))
+    ax.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, 0.0), ncol=6,
+              frameon=False, fontsize=6.6, handlelength=1.4, columnspacing=1.0,
+              handletextpad=0.4)
+    _save_print(d.fig, "fig_system_architecture")
 
 
 _NUM_WORDS = {5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine",
@@ -770,9 +692,8 @@ def fig_psi_binning():
     The mechanism behind the numerical PSI result. Bin edges are drawn over
     the baseline's full observed range, so a feature whose range is set by an
     extreme outlier gets bins far wider than its own variability, and no
-    plausible shift moves mass across a boundary. passenger_count is the only
-    numerical feature whose bin width is smaller than its standard deviation,
-    and the only one on which PSI responds at all.
+    plausible shift moves mass across a boundary. The values come from the
+    pilot replays of the 200,000-record slice, not from the full control run.
     """
     df = q("""
         SELECT (e.ground_truth->>'window_size')::int AS ws,
@@ -787,64 +708,66 @@ def fig_psi_binning():
         print("  ! no PILOT numerical PSI rows; skipping fig_psi_binning")
         return
 
-    # Share of the reference falling in the single most populated bin. This
-    # orders the features exactly inversely to their observed maximum PSI,
-    # which the bin-width ratio does not, and it states the mechanism more
-    # directly: PSI sums the change in each bin's share, so where nearly the
-    # whole reference sits in one bin there is nowhere for mass to move.
-    ratios = {}
+    # Share of the reference falling in the single most populated bin. On the
+    # pilot slice it orders the features exactly inversely to their maximum PSI.
+    shares = {}
     try:
         import json
         b = json.load(open("great_expectations/reference_baseline.json"))
         for f, r in b["numerical"].items():
             c = r["hist_counts"]
-            ratios[f] = 100.0 * max(c) / sum(c)
+            shares[f] = 100.0 * max(c) / sum(c)
     except Exception as exc:
         print(f"    (modal-bin shares unavailable: {type(exc).__name__})")
 
     order = sorted(df.feature_name.unique(),
                    key=lambda f: -df[df.feature_name == f].max_psi.max())
-    palette = [BLUE, ORANGE, GREEN, RED, "#7B5EA7"]
+    palette = [BLUE, ORANGE, GREEN, RED, PURPLE]
     markers = ["o", "s", "^", "D", "v"]
 
-    fig, ax = plt.subplots(figsize=(7.6, 5.0))
+    fig, ax = plt.subplots(figsize=(TEXT_W, 3.1))
     for i, feat in enumerate(order):
         d = df[df.feature_name == feat].sort_values("ws")
         lbl = feat
-        if feat in ratios:
-            # four decimals: trip_distance is 99.9995% and rounds to a
-            # misleading 100.00% at two, which would also contradict Table 5.6
-            lbl += f"  ({ratios[feat]:.4f}% of reference in one bin)"
+        if feat in shares:
+            # four decimals for trip_distance: 99.9995% would round to 100.00%
+            pct = f"{shares[feat]:.2f}" if shares[feat] < 99.99 else f"{shares[feat]:.4f}"
+            lbl += f"  ({pct}%)"
         ax.plot(d.ws, d.max_psi.clip(lower=1e-5), marker=markers[i % 5],
-                color=palette[i % 5], label=lbl, linewidth=2, markersize=6.5)
+                color=palette[i % 5], label=lbl, linewidth=1.3, markersize=4.5,
+                markeredgecolor="white", markeredgewidth=0.5)
 
-    ax.axhline(0.2, color=GREY, linestyle="--", linewidth=1.2)
-    ax.text(3200, 0.135, "alerting threshold (0.2)", fontsize=8.5, color=GREY)
+    ax.axhline(0.2, color=GREY, linestyle="--", linewidth=0.9)
+    ax.text(df.ws.max(), 0.23, "alert threshold, PSI = 0.20", fontsize=7,
+            color=MUTED, ha="right", va="bottom")
     ax.set_xscale("log"); ax.set_yscale("log")
-    ax.set_xticks(sorted(df.ws.unique()))
-    ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
+    ws = sorted(df.ws.unique())
+    ax.set_xticks(ws)
+    ax.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:,.0f}"))
+    ax.xaxis.set_minor_locator(matplotlib.ticker.NullLocator())
+    ax.set_xlim(ws[0] / 1.15, ws[-1] * 1.15)
+    ax.set_ylim(1e-4, 0.6)
+    ax.set_yticks([1e-4, 1e-3, 1e-2, 1e-1])
+    ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:g}"))
+    ax.yaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
     ax.set_xlabel("Window size (records)")
-    ax.set_ylabel("Maximum PSI observed (log scale)")
-    ax.set_title("Maximum PSI per numerical feature, unmodified data")
-    ax.legend(frameon=False, fontsize=8.5, loc="lower left")
-    fig.savefig(f"{OUT}/fig_psi_binning.png")
-    plt.close(fig)
-    print("fig_psi_binning.png")
+    ax.set_ylabel("Maximum PSI on the pilot slice")
+    _print_axes(ax)
+    ax.legend(title="Feature (share of reference in largest bin)", title_fontsize=7,
+              fontsize=7, frameon=True, framealpha=1, edgecolor="white",
+              loc="upper right", bbox_to_anchor=(1.0, 0.83), handlelength=2.0,
+              borderpad=0.3, labelspacing=0.3)
+    _save_print(fig, "fig_psi_binning")
     for feat in order:
         d = df[df.feature_name == feat].sort_values("ws")
-        r = f"  modal share {ratios[feat]:>9.4f}%" if feat in ratios else ""
+        r = f"  modal share {shares[feat]:>9.4f}%" if feat in shares else ""
         print(f"    {feat:<18}" + "  ".join(f"{v:9.4f}" for v in d.max_psi) + r)
+
 
 
 # ---------------------------------------------------------------- figure 7
 def fig_unseen_category():
     """RatecodeID under three conditions: control, rare-category shift, unseen.
-
-    Both metrics detect the unseen category. Only one reports it on a scale
-    that can be reasoned about: PSI moves to roughly seventeen times its
-    threshold, while the chi-square statistic reaches the order of 10^11
-    because an unseen category drives the expected count to zero and the
-    value returned is a function of the regularisation floor.
 
     Post-activation means use window_end, the same boundary as
     build_result_tables.py, so the values here agree with recall_by_metric.csv.
@@ -865,12 +788,12 @@ def fig_unseen_category():
         return
 
     labels = {"C0": "C0\ncontrol",
-              "S3": "S3\nrare category\n0.88% \u2192 25%",
-              "S6": "S6\nunseen category\n0% \u2192 25%"}
+              "S3": "S3\nrare category\n0.88% to 25%",
+              "S6": "S6\nunseen category\n0% to 25%"}
     order = ["C0", "S3", "S6"]
     colours = [GREY, ORANGE, RED]
 
-    fig, axes = plt.subplots(1, 2, figsize=(9.6, 4.8))
+    fig, axes = plt.subplots(1, 2, figsize=(TEXT_W, 2.9))
     for ax, metric, title, thr in [
             (axes[0], "chi2", "Chi-square statistic", None),
             (axes[1], "psi", "Population Stability Index", 0.2)]:
@@ -879,23 +802,22 @@ def fig_unseen_category():
         ax.bar([labels[s] for s in order], vals, color=colours,
                edgecolor="white", width=.6)
         ax.set_yscale("log")
-        ax.set_title(title, fontsize=11)
+        ax.set_title(title, fontsize=8, fontweight="normal", color=INK)
         ax.set_ylabel("Post-activation mean (log scale)")
-        top = max(vals)
-        ax.set_ylim(min(vals) / 6, top * 40)
+        ax.set_ylim(min(vals) / 6, max(vals) * (40 if metric == "chi2" else 6))
+        if metric == "psi":
+            ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:g}"))
+            ax.yaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
         for i, v in enumerate(vals):
             txt = f"{v:,.0f}" if v >= 100 else f"{v:.3f}"
-            ax.text(i, v * 1.5, txt, ha="center", fontsize=9, fontweight="bold")
+            ax.text(i, v * 1.5, txt, ha="center", fontsize=7, color=INK)
         if thr is not None:
-            ax.axhline(thr, color=GREY, linestyle="--", linewidth=1.2)
-            ax.text(-0.42, thr * 1.25, "threshold", fontsize=8, color=GREY,
-                    ha="left")
-    fig.suptitle("RatecodeID under three conditions", fontsize=13,
-                 fontweight="bold", y=1.0)
-    fig.tight_layout()
-    fig.savefig(f"{OUT}/fig_unseen_category.png")
-    plt.close(fig)
-    print("fig_unseen_category.png")
+            ax.axhline(thr, color=GREY, linestyle="--", linewidth=0.8)
+            ax.text(-0.42, thr * 1.25, "threshold", fontsize=7, color=MUTED, ha="left")
+        _print_axes(ax)
+        ax.tick_params(axis="x", labelsize=7, colors=INK, length=0)
+    fig.tight_layout(w_pad=2.0)
+    _save_print(fig, "fig_unseen_category")
     for _, r in df.sort_values(["metric_name", "scen"]).iterrows():
         print(f"    {r.scen}  {r.metric_name:<5}  post = {float(r.post):,.4f}")
 
@@ -904,17 +826,17 @@ def fig_unseen_category():
 def fig_metric_timeline():
     """KS on fare_amount across the corpus: control against S1.
 
-    The only figure showing the temporal dimension directly. The control
-    series wanders because the reference is a single week in January and the
-    corpus spans a year; the S1 series separates from it at the activation
-    point and does not return.
+    The control is drawn for the whole year. S1 is drawn from the first window
+    that ends at or after activation; before that its values are identical to
+    the control's, because nothing differs until the activation row.
+    Windows whose start falls outside 2024 (corrupted timestamps) are omitted.
     """
-    act = q("""SELECT MIN(activation_timestamp) AS ts
-               FROM dq_monitoring.experiments
-               WHERE activation_timestamp IS NOT NULL""").ts.iloc[0]
+    act = pd.Timestamp(q("""SELECT MIN(activation_timestamp) AS ts
+                            FROM dq_monitoring.experiments
+                            WHERE activation_timestamp IS NOT NULL""").ts.iloc[0])
 
-    df = q(f"""
-        SELECT LEFT(experiment_id, 2) AS scen, window_start, metric_value
+    df = q("""
+        SELECT LEFT(experiment_id, 2) AS scen, window_start, window_end, metric_value
         FROM dq_monitoring.drift_scores
         WHERE feature_name = 'fare_amount' AND metric_name = 'ks'
           AND experiment_id LIKE ANY (ARRAY['C0%', 'S1%'])
@@ -925,45 +847,42 @@ def fig_metric_timeline():
         print("  ! no fare_amount KS rows; skipping fig_metric_timeline")
         return
 
-    fig, ax = plt.subplots(figsize=(9.2, 4.6))
-    for scen, colour, lbl in [("C0", GREY, "C0  clean control"),
-                              ("S1", RED, "S1  mean shift injected")]:
-        d = df[df.scen == scen].sort_values("window_start")
-        if d.empty:
-            continue
-        ax.plot(d.window_start, d.metric_value, color=colour, linewidth=.5,
-                alpha=.35, zorder=2)
-        ax.plot(d.window_start, d.metric_value.rolling(50, center=True).mean(),
-                color=colour, linewidth=2.0, label=lbl, zorder=3)
+    c0 = df[df.scen == "C0"].sort_values("window_start")
+    s1 = df[(df.scen == "S1") & (df.window_end >= act)].sort_values("window_start")
 
-    ax.axvline(pd.Timestamp(act), color=BLUE, linestyle="--", linewidth=1.4,
-               zorder=4)
-    ax.text(pd.Timestamp(act), ax.get_ylim()[1] * .97, "  activation",
-            color=BLUE, fontsize=9, va="top")
-    ax.axhline(0.1, color=GREEN, linestyle=":", linewidth=1.4, zorder=1)
-    ax.text(pd.Timestamp("2024-01-10"), 0.108, "effect-size gate (D = 0.1)",
-            color=GREEN, fontsize=8.5)
+    fig, ax = plt.subplots(figsize=(TEXT_W, 2.9))
+    for d, colour in ((c0, GREY), (s1, RED)):
+        ax.plot(d.window_start, d.metric_value, color=colour, linewidth=0.35, alpha=0.4)
+        ax.plot(d.window_start, d.metric_value.rolling(50, center=True, min_periods=1).mean(),
+                color=colour, linewidth=1.4)
 
+    ax.axhline(0.1, color=GREEN, linestyle=":", linewidth=1.0)
+    ax.text(pd.Timestamp("2024-01-04"), 0.112, "effect-size gate, D = 0.1", fontsize=7,
+            color=GREEN, va="bottom",
+            bbox=dict(facecolor="white", edgecolor="none", pad=0.6, alpha=0.9))
+    ax.axvline(act, color=BLUE, linestyle="--", linewidth=0.9)
+    ax.text(act + pd.Timedelta(days=3), 0.755, "activation, 3 July 2024", fontsize=7,
+            color=BLUE, va="top")
+
+    # direct labels in the right margin, level with each rolling mean
+    end = pd.Timestamp("2025-01-05")
+    ax.text(end, float(s1.metric_value.tail(50).mean()), "S1\nfare shift", fontsize=7.5,
+            color=RED, va="center", ha="left", clip_on=False, linespacing=1.1)
+    ax.text(end, float(c0.metric_value.tail(50).mean()), "C0\ncontrol", fontsize=7.5,
+            color=MUTED, va="center", ha="left", clip_on=False, linespacing=1.1)
+
+    ax.set_ylim(0, 0.77)
+    ax.set_yticks([0, 0.2, 0.4, 0.6])
+    ax.set_xlim(pd.Timestamp("2024-01-01"), pd.Timestamp("2025-01-01"))
+    ax.xaxis.set_major_locator(matplotlib.dates.MonthLocator())
+    ax.xaxis.set_major_formatter(matplotlib.dates.DateFormatter("%b"))
+    ax.set_xlabel("Window start, event time (2024)")
     ax.set_ylabel("Kolmogorov-Smirnov D")
-    ax.set_xlabel("Window start (event time)")
-    ax.set_title("KS on fare_amount across the corpus, control against S1")
-    ax.legend(frameon=False, fontsize=9, loc="upper left")
-    n_excl = 4117 - len(df[df.scen == "C0"])
-    ax.text(0.995, 0.62,
-            f"Thin lines are per-window values; bold lines a 50-window rolling mean.\n"
-            f"{n_excl} windows per run are omitted: their bounds fall outside 2024 "
-            f"(Chapter 4).",
-            transform=ax.transAxes, ha="right", va="bottom",
-            fontsize=8, style="italic", color="#555555")
-    fig.savefig(f"{OUT}/fig_metric_timeline.png")
-    plt.close(fig)
-    print("fig_metric_timeline.png")
-    for scen in ("C0", "S1"):
-        d = df[df.scen == scen]
-        if d.empty:
-            continue
-        print(f"    {scen}: {len(d):,} windows, "
-              f"D mean {d.metric_value.mean():.4f}, max {d.metric_value.max():.4f}")
+    _print_axes(ax)
+    _save_print(fig, "fig_metric_timeline")
+    for name, d in (("C0", c0), ("S1 after activation", s1)):
+        print(f"    {name}: {len(d):,} windows, D mean {d.metric_value.mean():.4f}, "
+              f"max {d.metric_value.max():.4f}")
 
 
 if __name__ == "__main__":
