@@ -119,3 +119,14 @@ results/              generated CSV result tables
 logs/                 per-run console logs
 PROJECT_RECORD.md     current status, rationale, and a log of what changed and why
 ```
+
+## Web interfaces
+
+While the services are running (`docker compose up -d`), two of them have a web page on the host:
+
+| Service | Address | What it shows |
+|---|---|---|
+| MLflow | http://localhost:5000 | One run per experiment, with its parameters and the gate value of every window |
+| Apache Airflow | http://localhost:8090 | The health-check and daily-summary DAGs |
+
+Airflow's web server listens on port 8080 inside its container and is published on 8090. Kafka (29092) and PostgreSQL (5432) are used by the scripts and are not web pages.
