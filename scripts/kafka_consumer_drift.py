@@ -34,8 +34,9 @@ USE_MLFLOW = os.environ.get("USE_MLFLOW", "1") == "1"
 
 BASELINE_PATH = "great_expectations/reference_baseline.json"
 
-# Alert thresholds. Justified and calibrated in the window-size pilot.
-PSI_THRESHOLD = 0.2          # midpoint of the 0.10/0.25 convention
+# Alert thresholds: global values fixed before the runs, not calibrated per
+# feature. The window-size pilot checked the window size only.
+PSI_THRESHOLD = 0.2          # between the 0.10 and 0.25 bounds of the convention
                              # (Siddiqi, 2006, p. 137); no fixed value has a
                              # stated error rate (Yurdakul & Naranjo, 2020).
                              # Examined critically in Ch. 5.
@@ -46,8 +47,11 @@ CHI2_MIN_CRAMERS_V = 0.1     # sqrt(chi2 / (n * (k-1))). Named for Cramer's V
                              # but NOT bounded by 1 here: this is a
                              # goodness-of-fit test against fixed baseline
                              # proportions, not a contingency table, so
-                             # Cramer's inequality does not apply. Measured
-                             # values exceed 1 in 2,142 feature-windows.
+                             # Cramer's inequality does not apply. n is the
+                             # window's non-null count and k the categories of
+                             # reference and window combined. Logged values
+                             # exceed 1 in 12 windows of every run and in
+                             # 2,058 (S3) and 2,059 (S6) RatecodeID windows.
                              # See Ch. 4; Cohen's w is the GoF analogue.
 EPS = 1e-6
 
