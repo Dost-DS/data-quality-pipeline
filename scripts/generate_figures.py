@@ -467,92 +467,98 @@ def fig_decision_tree():
 
 # ---------------------------------------------------------------- figure 5b
 def fig_replay_pipeline():
-    """When each registered run was executed, read from the experiments table.
+    """Order of execution of the registered runs (Appendix A, Figure A.1).
 
-    The run list and start times are queried, so the figure states the order
-    in which the runs were actually made rather than the order they were
-    planned in. Classification and the interpretation framework were applied
-    to all eight runs together after the last run.
+    One row per run in the order the runs were started, with the start date
+    read from dq_monitoring.experiments. The five pilot replays are drawn as
+    one row. The last row marks the classification and the framework, which
+    were applied to all eight runs together after S7, so it carries no date.
     """
-    runs = q("""SELECT scenario, experiment_id, started_at
-                FROM dq_monitoring.experiments ORDER BY started_at""")
-    if runs.empty:
+    df = q("""SELECT scenario, started_at
+              FROM dq_monitoring.experiments
+              ORDER BY started_at""")
+    if df.empty:
         print("  ! no runs found; skipping fig_replay_pipeline")
         return
-    runs["t"] = pd.to_datetime(runs.started_at, utc=True).dt.tz_localize(None)
-    C_PILOT, C_CLEAN, C_INJ, C_POST = PURPLE, "#C0435A", GREEN, "#D98A3D"
+    df["day"] = pd.to_datetime(df.started_at, utc=True).dt.date
 
-    def colour(s):
-        return C_PILOT if s == "PILOT" else C_CLEAN if s in ("C0", "S7") else C_INJ
+    main = df[df.scenario != "PILOT"]
+    dups = main[main.duplicated("scenario", keep=False)]
+    if not dups.empty:
+        print("  ! more than one row per scenario; the latest is kept:",
+              sorted(dups.scenario.unique()))
+    main = main.drop_duplicates("scenario", keep="last")
+    pilot = df[df.scenario == "PILOT"]
 
-    # runs started within six hours of each other share one label
-    groups = []
-    for _, r in runs.iterrows():
-        kind = "PILOT" if r.scenario == "PILOT" else r.scenario
-        if groups and (r.t - groups[-1]["t1"]) < pd.Timedelta(hours=6) and \
-                (kind == "PILOT") == (groups[-1]["kind"] == "PILOT"):
-            groups[-1]["names"].append(kind); groups[-1]["t1"] = r.t
-        else:
-            groups.append(dict(kind=kind, names=[kind], t0=r.t, t1=r.t))
+    what = {"C0": "clean control, no injection",
+            "S1": "mean shift on fare_amount",
+            "S2": "value substitution on payment_type",
+            "S3": "rare-category shift on RatecodeID",
+            "S4": "variance shift on trip_distance",
+            "S5": "S1 and S2 combined",
+            "S6": "unseen category on RatecodeID",
+            "S7": "schema change, no distributional change"}
+    PURPLE, CRIMSON, AMBER = "#7B5EA7", "#C0435A", "#D98A3D"
+    no_injection = {"C0", "S7"}
 
-    def label(g):
-        if g["kind"] == "PILOT":
-            return f"Window-size pilot,\n{len(g['names'])} sizes"
-        n = g["names"]
-        return n[0] if len(n) == 1 else f"{n[0]} to {n[-1]}"
+    rows = [(r.started_at, r.day, r.scenario, what[r.scenario],
+             CRIMSON if r.scenario in no_injection else GREEN)
+            for r in main.itertuples()]
+    if not pilot.empty:
+        p = pilot.iloc[0]
+        rows.append((p.started_at, p.day, "Pilot",
+                     f"window-size pilot, {len(pilot)} window sizes on a "
+                     "200,000-record slice", PURPLE))
+    rows.sort(key=lambda r: pd.Timestamp(r[0]))
 
-    fig, ax = plt.subplots(figsize=(TEXT_W, 1.7))
-    t_min = runs.t.min().normalize() - pd.Timedelta(days=1)
-    t_max = runs.t.max().normalize() + pd.Timedelta(days=1, hours=12)
-    ax.scatter(runs.t, np.zeros(len(runs)), s=26, zorder=3,
-               color=[colour(s) for s in runs.scenario], edgecolor="white", linewidth=0.6)
-    # place each label on the lowest level where it neither overlaps another
-    # label nor is crossed by another label's leader line
-    days_per_inch = (t_max - t_min) / pd.Timedelta(days=1) / (TEXT_W * 0.8)
-    placed = []                                   # (x, half_width, level)
-    for g in groups:
-        tm = g["t0"] + (g["t1"] - g["t0"]) / 2
-        x = (tm - t_min) / pd.Timedelta(days=1)
-        half = max(len(s) for s in label(g).split("\n")) * 0.058 * days_per_inch / 2 + 0.15
-        for level in (0.35, 0.8, 1.25):
-            clash = any(abs(x - px) < half + ph and pl == level for px, ph, pl in placed)
-            clash |= any(pl < level and abs(x - px) < ph for px, ph, pl in placed)
-            clash |= any(pl > level and abs(px - x) < half for px, ph, pl in placed)
-            if not clash:
-                break
-        placed.append((x, half, level))
-        ax.plot([tm, tm], [0.07, level - 0.04], color=MUTED, linewidth=0.6)
-        ax.text(tm, level, label(g), ha="center", va="bottom", fontsize=7, color=INK,
-                linespacing=1.15)
-
-    # classification and the framework follow the last run
-    ax.annotate("Classification and\nframework, all eight\nruns together",
-                xy=(t_max, 0), xytext=(t_max + pd.Timedelta(days=0.6), 0),
-                fontsize=7, color=INK, va="center", ha="left",
-                bbox=dict(boxstyle="round,pad=0.35", facecolor="#FAE8CE",
-                          edgecolor=C_POST, linewidth=0.8),
-                arrowprops=dict(arrowstyle="<-", color=MUTED, linewidth=0.8))
-
-    ax.set_ylim(-0.45, 1.85)
-    ax.set_xlim(t_min, t_max)
-    ax.yaxis.set_visible(False)
-    for side in ("left", "top", "right"):
-        ax.spines[side].set_visible(False)
-    ax.spines["bottom"].set_position(("data", 0))
-    ax.spines["bottom"].set_color(MUTED)
-    ax.spines["bottom"].set_linewidth(0.8)
-    ax.xaxis.set_major_locator(matplotlib.dates.DayLocator(interval=2))
-    ax.xaxis.set_major_formatter(matplotlib.dates.DateFormatter("%d %b"))
-    ax.tick_params(axis="x", labelsize=7, colors=MUTED, length=3, width=0.6)
+    n = len(rows) + 1
+    fig, ax = plt.subplots(figsize=(7.6, 0.42 * n + 0.9))
+    ax.axis("off")
     ax.grid(False)
-    handles = [Line2D([0], [0], marker="o", linestyle="", markersize=5, color=c, label=l)
-               for c, l in [(C_PILOT, "Window-size pilot"), (C_CLEAN, "No injection (C0, S7)"),
-                            (C_INJ, "Injection (S1 to S6)")]]
-    ax.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.63, 1.02), ncol=1,
-              frameon=False, fontsize=7, handletextpad=0.3, labelspacing=0.3)
-    _save_print(fig, "fig_replay_pipeline")
-    for _, r in runs.iterrows():
-        print(f"    {r.t:%Y-%m-%d %H:%M}  {r.experiment_id}")
+    y = [n - 1 - i for i in range(n)]
+    x_date, x_line, x_name, x_what = 0.0, 1.05, 1.35, 2.05
+
+    ax.plot([x_line, x_line], [y[-1], y[0]], color="#9a9a9a", lw=1.4, zorder=1)
+    for i, (_, day, name, desc, colour) in enumerate(rows):
+        ax.text(x_date + 0.85, y[i], f"{day.day} Sep", ha="right", va="center",
+                fontsize=9.5, color="#333333")
+        ax.scatter([x_line], [y[i]], s=95, color=colour, edgecolor="white",
+                   linewidth=1.2, zorder=3)
+        ax.text(x_name, y[i], name, ha="left", va="center", fontsize=10,
+                fontweight="bold", color="#1a1a1a")
+        ax.text(x_what, y[i], desc, ha="left", va="center", fontsize=9.5,
+                color="#333333")
+        if i > 0:
+            gap = (day - rows[i - 1][1]).days
+            if gap >= 5:
+                ax.text(x_line + 0.14, (y[i] + y[i - 1]) / 2, f"{gap} days later",
+                        ha="left", va="center", fontsize=8.5, style="italic",
+                        color="#666666")
+
+    ax.scatter([x_line], [y[-1]], s=95, marker="s", color=AMBER,
+               edgecolor="white", linewidth=1.2, zorder=3)
+    ax.text(x_date + 0.85, y[-1], "after S7", ha="right", va="center",
+            fontsize=9.5, color="#333333")
+    ax.text(x_name, y[-1], "Alert classification and framework, applied to "
+            "all eight runs together", ha="left", va="center", fontsize=10,
+            fontweight="bold", color="#1a1a1a")
+
+    handles = [Line2D([], [], marker="o", ls="", ms=8, color=c, label=l)
+               for c, l in [(CRIMSON, "No injection (C0, S7)"),
+                            (GREEN, "Injection (S1 to S6)"),
+                            (PURPLE, "Window-size pilot")]]
+    handles.append(Line2D([], [], marker="s", ls="", ms=8, color=AMBER,
+                          label="Analysis of all runs"))
+    ax.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.0),
+              ncol=4, frameon=False, fontsize=9, handletextpad=0.3,
+              columnspacing=1.4)
+    ax.set_xlim(-0.1, 7.6)
+    ax.set_ylim(-0.6, n - 0.4)
+    fig.savefig(f"{OUT}/fig_replay_pipeline.png")
+    plt.close(fig)
+    print("fig_replay_pipeline.png")
+    for r in rows:
+        print(f"    {r[1]}  {r[2]}")
 
 
 # ---------------------------------------------------------------- figure 5c
@@ -885,6 +891,86 @@ def fig_metric_timeline():
               f"max {d.metric_value.max():.4f}")
 
 
+# ---------------------------------------------------------------- figure 2.1
+def fig_conceptual_framework():
+    """Conceptual framework of the study (Chapter 2, Figure 2.1).
+
+    Three checks on the event-time stream. Validation failures are recorded
+    per batch, distributional monitoring raises the alerts, and the schema
+    change flag goes straight to the decision procedure (criterion C7). Each
+    alert has one of four possible causes; baseline variation can only be
+    established with a clean control replay. Static diagram, no database query.
+    """
+    PALE_B, PALE_G, PALE_O, PALE_GR, PALE_R = ("#DCE6F1", "#DFF0E3", "#FBE7D6",
+                                              "#EDEDED", "#F6DADD")
+    fig, ax = plt.subplots(figsize=(10.6, 3.5))
+    ax.set_xlim(0, 11)
+    ax.set_ylim(0, 3.5)
+    ax.axis("off")
+
+    def box(x, y, w, h, title, sub, fc, ec, fs=9, sfs=7.4):
+        ax.add_patch(FancyBboxPatch((x, y), w, h,
+                                    boxstyle="round,pad=0.02,rounding_size=0.06",
+                                    fc=fc, ec=ec, lw=1.3))
+        ax.text(x + w / 2, y + h / 2 + (0.1 if sub else 0), title, ha="center",
+                va="center", fontsize=fs, fontweight="bold", color="#1a1a1a")
+        if sub:
+            ax.text(x + w / 2, y + h / 2 - 0.13, sub, ha="center", va="center",
+                    fontsize=sfs, color="#333333")
+
+    def arrow(x1, y1, x2, y2, ls="-"):
+        ax.add_patch(FancyArrowPatch((x1, y1), (x2, y2), arrowstyle="-|>",
+                                     mutation_scale=11, color="#444444", lw=1.2,
+                                     linestyle=ls))
+
+    mid = 1.75
+    box(0.05, mid - 0.35, 1.45, 0.7, "Stream", "ordered by event time",
+        PALE_GR, GREY, sfs=7)
+
+    val_y, dist_y, sch_y = 2.6, mid - 0.31, 0.3
+    for title, sub, y in [
+            ("Rule-based validation", "declared constraints per batch", val_y),
+            ("Distributional monitoring",
+             "PSI with KS or chi-square, effect-size gate", dist_y),
+            ("Schema monitoring", "columns against a stored schema", sch_y)]:
+        box(1.9, y, 3.0, 0.62, title, sub, PALE_B, BLUE, sfs=7)
+        arrow(1.5, mid, 1.9, y + 0.31)
+
+    box(5.3, val_y + 0.06, 1.35, 0.5, "Failures", "recorded per batch",
+        PALE_GR, GREY, fs=8.4, sfs=6.8)
+    arrow(4.9, val_y + 0.31, 5.3, val_y + 0.31)
+
+    box(5.3, mid - 0.35, 1.35, 0.7, "Alert", "window differs", PALE_R, RED)
+    arrow(4.9, mid, 5.3, mid)
+
+    causes = [("Injected change", None, 2.62),
+              ("Declared propagation", None, 2.0),
+              ("Baseline variation", "requires a clean control replay", 1.38),
+              ("Unexplained", None, 0.76)]
+    ax.text(8.075, 3.32, "Four possible causes", ha="center", va="center",
+            fontsize=8, style="italic", color="#555555")
+    for title, sub, y in causes:
+        box(7.05, y, 2.05, 0.5, title, sub, PALE_O, ORANGE, fs=8.2, sfs=6.4)
+        arrow(6.65, mid, 7.05, y + 0.25)
+
+    act_x, act_w = 9.5, 1.4
+    box(act_x, mid - 0.35, act_w, 0.7, "Action", "decision procedure",
+        PALE_G, GREEN, sfs=6.8)
+    for _, _, y in causes:
+        arrow(9.1, y + 0.25, act_x, mid)
+
+    fx = act_x + act_w / 2
+    ax.plot([4.9, fx], [sch_y + 0.31, sch_y + 0.31], color="#444444", lw=1.2,
+            ls=(0, (4, 2)))
+    arrow(fx, sch_y + 0.31, fx, mid - 0.35, ls=(0, (4, 2)))
+    ax.text(6.0, sch_y + 0.22, "schema change flag", ha="center", va="top",
+            fontsize=7.4, style="italic", color="#555555")
+
+    fig.savefig(f"{OUT}/fig_conceptual_framework.png")
+    plt.close(fig)
+    print("fig_conceptual_framework.png")
+
+
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
     fig_window_pilot()
@@ -897,4 +983,5 @@ if __name__ == "__main__":
     fig_psi_binning()
     fig_unseen_category()
     fig_metric_timeline()
+    fig_conceptual_framework()
     print(f"\nfigures written to {OUT}/")
