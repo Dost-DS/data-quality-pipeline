@@ -7,9 +7,7 @@ for data-quality defects, distributional drift, and schema change. Integrates
 Apache Kafka, Great Expectations, PostgreSQL, MLflow, and Apache Airflow behind
 five adapter interfaces, deployed with Docker Compose on a single node.
 
-For the current project status, configuration rationale, experiment results, and a
-running log of what changed and why, see `PROJECT_RECORD.md`. This file only covers
-what's needed to set the pipeline up and run it.
+This README covers what is needed to set the pipeline up and run it.
 
 ## Architecture
 
@@ -117,7 +115,6 @@ data/raw/             downloaded Parquet corpus (not tracked)
 figures/              generated figures -- regenerate with generate_figures.py
 results/              generated CSV result tables
 logs/                 per-run console logs
-PROJECT_RECORD.md     current status, rationale, and a log of what changed and why
 ```
 
 ## Web interfaces
