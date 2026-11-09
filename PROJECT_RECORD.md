@@ -3,10 +3,9 @@
 **Designing and Evaluating an End-to-End Data Quality Monitoring Pipeline for Streaming Data**
 
 Dost Muhammad, B.Sc. Data Science, IU International University of Applied Sciences
-Supervisor: Dr. Mark Menzel. Submission: 16 November 2026, 23:59 CET
+Supervisor: Dr. Mark Menzel. 
 
-Revised 9 November 2026. This record describes the final state of the pipeline, the
-experiments and the thesis. Setup and run instructions are in `README.md`.
+Setup and run instructions are in `README.md`.
 
 ---
 
@@ -29,10 +28,7 @@ experiments and the thesis. Setup and run instructions are in `README.md`.
 ## 2. Environment
 
 Windows 11, WSL2 Ubuntu 26.04, AMD Ryzen 9 9900X3D, 64 GB RAM.
-WSL configured through `C:\Users\Pro-D\.wslconfig` for 48 GB and 12 processors.
-
-Project path: `~/thesis/data-quality-pipeline`
-From Windows: `\\wsl$\Ubuntu\home\dost\thesis\data-quality-pipeline`
+WSL limited to 48 GB of memory and 12 processors.
 
 The project runs in WSL. Do not move it to a Windows drive: Docker volumes hold the
 database, and the `/mnt/*` file system is roughly ten times slower.
@@ -437,31 +433,12 @@ figures and tables. The declaration of authenticity follows the appendices.
 
 76 entries, APA 7. Every source was checked against publisher records, DOIs or the
 document itself, and the claims the thesis attributes to each source were checked as
-well. In-text citations carry page numbers wherever the source has them.
-
-Notes on individual sources:
-- Breck et al. (2019), "several petabytes of production data per day": verbatim in the paper.
-- Schelter et al. (2018), "unit tests for data": the paper's own phrase.
-- Ehrlinger and Wöß (2022): the paper's three areas are data profiling, data quality
-  measurement and data quality monitoring.
-- Poenaru-Olaru et al. (2022): their benchmark includes real-world drift datasets
-  (Electricity, Airlines). The distinction the thesis draws is that they have no control
-  replay of the same corpus.
-- Lu, J. et al.: 2019 (IEEE TKDE 31(12)); the DOI carries the 2018 early-access date.
-- Massey (1951): Frank J. Massey Jr.
-
-Rule: cite nothing that has not been opened.
+well. 
 
 ---
 
-## 12. Open items
 
-None. The pipeline, the experiments, the thesis and the repository are complete.
-Remaining: submission by 16 November 2026, 23:59 CET.
-
----
-
-## 13. Reference commands
+## 12. Reference commands
 
 ```bash
 cd ~/thesis/data-quality-pipeline && source .venv/bin/activate
@@ -502,7 +479,7 @@ Do not truncate the database between scenarios: classification needs C0.
 
 ---
 
-## 14. Notes for resuming
+## 13. Notes for resuming
 
 - Pause Windows Update and disable sleep before any long run. Three runs were lost or
   damaged this way, and `tee` overwrote the S6 log when the same experiment was started
