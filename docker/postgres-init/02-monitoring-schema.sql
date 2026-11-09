@@ -94,3 +94,4 @@ CREATE INDEX IF NOT EXISTS idx_drift_feature         ON dq_monitoring.drift_scor
 CREATE INDEX IF NOT EXISTS idx_schema_experiment     ON dq_monitoring.schema_snapshots(experiment_id);
 CREATE INDEX IF NOT EXISTS idx_alert_experiment      ON dq_monitoring.alert_classifications(experiment_id);
 CREATE INDEX IF NOT EXISTS idx_alert_label           ON dq_monitoring.alert_classifications(label);
+

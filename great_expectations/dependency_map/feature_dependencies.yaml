@@ -1,4 +1,4 @@
-# Feature dependency map for alert classification. 
+# Feature dependency map for alert classification.
 #
 # Committed before any injection experiment is run, so that no edge can be
 # added after the fact to explain away an inconvenient alert.
