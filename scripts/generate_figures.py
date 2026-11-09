@@ -1,4 +1,4 @@
-"""Generate the figures for the results chapters.
+"""Generate the figures for the results chapters. 
 
 Reads directly from PostgreSQL so that every figure is reproducible from the
 stored experiment data rather than from intermediate files.

@@ -1,4 +1,4 @@
-"""Blind mode with a magnitude-aware baseline comparison (revised C3).
+"""Blind mode with a magnitude-aware baseline comparison (revised C3). 
 
 The operator is assumed to hold the control replay's full distribution of
 metric values per (feature, metric), not merely a binary alert flag. An

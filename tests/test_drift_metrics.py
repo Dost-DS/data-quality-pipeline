@@ -1,4 +1,4 @@
-"""Correctness tests for the drift metric implementations, and the
+"""Correctness tests for the drift metric implementations, and the 
 bin-geometry demonstration behind the PSI result (Chapter 5)."""
 import json
 import sys, os

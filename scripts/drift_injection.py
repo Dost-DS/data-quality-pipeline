@@ -1,4 +1,4 @@
-"""Deterministic drift injection for the controlled experiments.
+"""Deterministic drift injection for the controlled experiments. 
 
 Each scenario takes a chronologically ordered slice, leaves the first
 `warmup_rows` records untouched, and applies a specific change from that

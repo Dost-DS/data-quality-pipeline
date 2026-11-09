@@ -1,4 +1,4 @@
-"""Verify one completed experiment before proceeding to the next."""
+"""Verify one completed experiment before proceeding to the next.""" 
 import argparse
 import psycopg2
 

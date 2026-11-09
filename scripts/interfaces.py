@@ -1,4 +1,4 @@
-"""Adapter interfaces for the monitoring pipeline (pipeline step 20).
+"""Adapter interfaces for the monitoring pipeline.
 
 Five boundaries at which a component can be substituted without changing
 the meaning of an experiment. Each is a structural protocol rather than a

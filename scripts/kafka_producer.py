@@ -1,4 +1,4 @@
-"""Replay NYC TLC taxi records chronologically to a Kafka topic.
+"""Replay NYC TLC taxi records chronologically to a Kafka topic. 
 
 Records are sorted by pickup timestamp and published with inter-arrival
 times compressed by a configurable factor, so that event-time order is

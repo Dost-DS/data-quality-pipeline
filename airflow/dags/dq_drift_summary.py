@@ -1,4 +1,4 @@
-"""Daily drift summary over stored monitoring results (pipeline step 19).
+"""Daily drift summary over stored monitoring results.
 
 Aggregates drift_scores and alert_classifications per experiment and
 reports alert rates by feature and metric, each against the clean control

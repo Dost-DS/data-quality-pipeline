@@ -1,4 +1,4 @@
-"""Regenerate every result table from the database.
+"""Regenerate every result table from the database. 
 
 Until now several CSVs in results/ were produced ad hoc and had no writer in
 the repository. The figures rendered only because the files were committed,

@@ -1,4 +1,4 @@
-"""Determine a defensible monitoring window size.
+"""Determine a defensible monitoring window size. 
 
 Replays the same clean slice at several window sizes. Because nothing is
 injected, every alert raised is a false alert, so the alert rate at each

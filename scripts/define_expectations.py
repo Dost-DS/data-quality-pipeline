@@ -1,4 +1,4 @@
-"""Define the expectation suite for the TLC taxi schema.
+"""Define the expectation suite for the TLC taxi schema. 
 
 Covers three groups of rule: schema presence, non-null constraints on the
 fields the pipeline keys on, and value constraints on ranges and category

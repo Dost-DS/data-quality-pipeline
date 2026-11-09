@@ -1,3 +1,4 @@
 === S6_20260909T043420_1d2d61 : unseen category injection ===
   corpus: 12 file(s), 41,169,720 rows
   activation in file 7/12 at offset 252,767
+

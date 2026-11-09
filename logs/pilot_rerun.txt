@@ -17,3 +17,4 @@ pilot slice: 200,000 rows, 2008-12-31 22:52:49 .. 2024-02-02 21:20:46
     8 windows, 176 scores, 8 alerts  [54s]
 
 pilot complete
+

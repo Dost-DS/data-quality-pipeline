@@ -1,4 +1,4 @@
-"""Read-only diagnostics for the thesis revision.
+"""Read-only diagnostics for the thesis revision. 
 
 Part A  PSI and empty reference bins.
         Rebuilds the drift consumer's 10,000-record windows from the raw

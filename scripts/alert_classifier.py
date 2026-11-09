@@ -10,7 +10,7 @@ Every alert is assigned exactly one label, by the first rule that applies:
                            same feature and metric did not alert in the control
   3 BASELINE_VARIATION     the same feature and metric alerted in the clean
                            control replay under an identical configuration
-  4 UNEXPLAINED            none of the above
+  4 UNEXPLAINED            none of the above 
 
 Only UNEXPLAINED alerts count as false positives in the headline results.
 """

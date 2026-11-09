@@ -1,4 +1,4 @@
-"""Validate batches of taxi records against the Great Expectations suite.
+"""Validate batches of taxi records against the Great Expectations suite. 
 
 Consumes from Kafka in fixed-size batches, runs the expectation suite over
 each batch, writes a summary row per batch, one row per failed expectation,

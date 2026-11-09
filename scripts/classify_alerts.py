@@ -1,4 +1,4 @@
-"""Apply the alert classification rule to every alert in every experiment.
+"""Apply the alert classification rule to every alert in every experiment. 
 
 Loads the clean control's alert set as the baseline reference, then labels
 each alert in every scenario according to the fixed precedence in Table 3.2.

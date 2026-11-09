@@ -1,4 +1,4 @@
-"""Compute and persist the reference baselines from the first week of January 2024.
+"""Compute and persist the reference baselines from the first week of January 2024. 
 
 Produces two artefacts:
   reference_baseline.json  bin edges and counts for numerical features,

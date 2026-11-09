@@ -174,3 +174,4 @@ services:
       - pipeline-net
     user: "${AIRFLOW_UID:-50000}:0"
     command: scheduler
+

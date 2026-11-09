@@ -1,4 +1,4 @@
-"""Validator substitution evidence (step 20, option B+).
+"""Validator substitution evidence.
 
 Two assertions support the substitutability claim made in Chapter 4:
 

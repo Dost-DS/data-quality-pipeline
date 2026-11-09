@@ -1,4 +1,4 @@
-"""Apply the Alert Interpretation Framework to every classified alert (D4)."""
+"""Apply the Alert Interpretation Framework to every classified alert (D4).""" 
 import os
 import sys
 

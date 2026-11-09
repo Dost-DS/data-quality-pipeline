@@ -1,4 +1,4 @@
-"""Blind-mode replication of D3/D4 (RQ4 evaluation).
+"""Blind-mode replication of D3/D4 (RQ4 evaluation). 
 
 Re-runs classification and interpretation with ground truth withheld:
 no injected targets, no activation timestamp. Only the control replay

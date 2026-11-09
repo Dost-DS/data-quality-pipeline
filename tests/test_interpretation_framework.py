@@ -84,3 +84,4 @@ def test_all_actions_reachable():
         recommend("UNEXPLAINED", "psi", 0.25)[0],
     }
     assert produced == set(ACTIONS)
+

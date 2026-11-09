@@ -1,4 +1,4 @@
-"""Substitution evidence for the remaining four adapters (step 20).
+"""Substitution evidence for the remaining four adapters.
 
 Each test compares a fallback against the behaviour the primary
 implementation is relied upon for. The Kafka comparison is marked

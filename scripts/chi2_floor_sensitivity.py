@@ -1,4 +1,4 @@
-"""How much of the reported chi-square magnitude is the floor constant? (F8)
+"""How much of the reported chi-square magnitude is the floor constant? (F8) 
 
 Reconstructs an S3-style window from the recorded RatecodeID baseline
 proportions with an unseen category at 25 percent, then sweeps the

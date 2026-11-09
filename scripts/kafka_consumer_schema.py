@@ -1,4 +1,4 @@
-"""Detect schema changes per window against the persisted schema baseline.
+"""Detect schema changes per window against the persisted schema baseline. 
 
 Compares the set of columns and their coarse types in each window against
 the baseline captured from the source files. Reports new columns, missing

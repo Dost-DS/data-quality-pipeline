@@ -1,4 +1,4 @@
-"""Rule-based Validator fallback without Great Expectations (step 20).
+"""Rule-based Validator fallback without Great Expectations.
 
 Reads the same suite definition Great Expectations reads, so both
 implementations derive from one source of truth and differ only in

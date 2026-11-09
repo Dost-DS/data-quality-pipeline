@@ -144,3 +144,4 @@ def test_control_alert_set_filters_non_drift():
 def test_every_label_is_declared():
     assert set(LABELS) == {"CONFIRMED_DETECTION", "EXPECTED_PROPAGATION",
                            "BASELINE_VARIATION", "UNEXPLAINED"}
+

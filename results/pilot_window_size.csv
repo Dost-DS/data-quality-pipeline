@@ -19,3 +19,4 @@ window_size,metric_name,feature_type,scores,alerts,alert_pct
 25000,ks,numerical,40,7,17.5
 25000,psi,categorical,48,0,0.0
 25000,psi,numerical,40,0,0.0
+

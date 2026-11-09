@@ -1,4 +1,4 @@
-"""Compute PSI, Kolmogorov-Smirnov, and Chi-square drift metrics per window.
+"""Compute PSI, Kolmogorov-Smirnov, and Chi-square drift metrics per window. 
 
 Each window of records is compared against the persisted baseline. PSI is
 computed over the baseline's fixed bin edges; KS compares raw values against

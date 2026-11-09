@@ -1,4 +1,4 @@
-"""Run one controlled experiment end to end.
+"""Run one controlled experiment end to end. 
 
 Applies a drift scenario to a chronological slice, records the ground truth,
 replays the mutated slice through Kafka, then runs the validation, drift, and

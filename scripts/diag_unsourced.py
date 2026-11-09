@@ -1,4 +1,4 @@
-"""Recompute three results the thesis reports without a surviving script.
+"""Recompute three results the thesis reports without a surviving script. 
 
 1. Persistence rule: an alert counts only if the same feature and metric also
    alerted in the two preceding windows (three consecutive windows).

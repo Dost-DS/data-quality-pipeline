@@ -1,4 +1,4 @@
-"""Fallback implementations for four adapter interfaces (step 20).
+"""Fallback implementations for four adapter interfaces.
 
 Each satisfies the corresponding Protocol in interfaces.py without the
 service the pipeline normally uses. Together with PlainValidator these

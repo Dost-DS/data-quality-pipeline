@@ -1,4 +1,4 @@
-"""Scheduled health check for the monitoring stack (pipeline step 19).
+"""Scheduled health check for the monitoring stack.
 
 Verifies that each component the pipeline depends on is reachable and
 that the metric store holds the schema the consumers write to. Runs

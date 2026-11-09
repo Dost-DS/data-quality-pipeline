@@ -1,4 +1,4 @@
-"""Alert Interpretation Framework (deliverable D3).
+"""Alert Interpretation Framework (deliverable D3). 
 
 Takes a classified alert together with its stored metric record and returns
 a recommended action. The classification rule established what an alert is;
